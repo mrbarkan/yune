@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { onAuthStateChanged, type User } from "firebase/auth";
+import { onIdTokenChanged, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { splitByDay, totals, useProfile, useRange } from "@/lib/data";
 import { startOfDay } from "@/lib/time";
@@ -16,13 +16,15 @@ type Tab = "today" | "week" | "settings";
 type SheetKind = "menu" | "food" | "move" | "water" | "sleep" | null;
 
 export default function App() {
-  const [user, setUser] = useState<User | null | undefined>(undefined);
+  // Envolto num objeto: depois de confirmar o e-mail o Firebase devolve o mesmo User, só com token novo.
+  const [state, setState] = useState<{ user: User | null }>();
 
-  useEffect(() => onAuthStateChanged(auth, setUser), []);
+  useEffect(() => onIdTokenChanged(auth, (user) => setState({ user })), []);
 
-  if (user === undefined) return <div className="boot" />;
+  if (!state) return <div className="boot" />;
+  const { user } = state;
   // Só entra quem confirmou o e-mail (as regras do Firestore exigem o mesmo).
-  if (!user || !user.emailVerified) return <Auth />;
+  if (!user || !user.emailVerified) return <Auth user={user} />;
   return <Shell userId={user.uid} />;
 }
 

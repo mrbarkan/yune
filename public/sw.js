@@ -1,5 +1,5 @@
 // Yune service worker: casca offline + Web Push.
-const CACHE = "yune-v1";
+const CACHE = "yune-v2";
 const SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
@@ -16,7 +16,8 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method !== "GET" || url.origin !== location.origin) return;
+  // /__/ é do Firebase (login com Google/Apple): sempre direto da rede.
+  if (e.request.method !== "GET" || url.origin !== location.origin || url.pathname.startsWith("/__/")) return;
   if (e.request.mode === "navigate") {
     e.respondWith(fetch(e.request).catch(() => caches.match("/")));
     return;

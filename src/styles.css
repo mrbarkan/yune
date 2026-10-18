@@ -338,6 +338,11 @@ input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; bo
 .am-core { fill: var(--ink) !important; }
 .auth-lede { font: 400 22px/1.3 var(--serif); color: var(--ink-2); margin: 14px 0 40px; }
 .auth-form { display: grid; gap: 18px; }
+.auth-providers { display: grid; gap: 10px; }
+.btn.provider { width: 100%; gap: 10px; }
+.btn.provider svg { width: 18px; height: 18px; }
+.auth-or { display: flex; align-items: center; gap: 12px; margin: 26px 0 8px; font-size: 13px; color: var(--ink-3); }
+.auth-or::before, .auth-or::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
 .auth-form .btn { margin-top: 8px; }
 .auth-switch { display: flex; gap: 20px; margin-top: 22px; font-size: 14px; color: var(--ink-2); }
 .auth-switch button { text-decoration: underline; text-underline-offset: 3px; }
