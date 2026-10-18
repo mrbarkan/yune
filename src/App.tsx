@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { onAuthStateChanged, type User } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { splitByDay, totals, useProfile, useRange } from "@/lib/data";
 import { startOfDay } from "@/lib/time";
 import Auth from "@/screens/Auth";
@@ -16,22 +16,14 @@ type Tab = "today" | "week" | "settings";
 type SheetKind = "menu" | "food" | "move" | "water" | "sleep" | null;
 
 export default function App() {
-  const [session, setSession] = useState<Session | null | undefined>(undefined);
-  const [recovery, setRecovery] = useState(false);
+  const [user, setUser] = useState<User | null | undefined>(undefined);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data } = supabase.auth.onAuthStateChange((event, s) => {
-      setSession(s);
-      if (event === "PASSWORD_RECOVERY") setRecovery(true);
-    });
-    return () => data.subscription.unsubscribe();
-  }, []);
+  useEffect(() => onAuthStateChanged(auth, setUser), []);
 
-  if (session === undefined) return <div className="boot" />;
-  if (!session) return <Auth />;
-  if (recovery) return <NewPassword onDone={() => setRecovery(false)} />;
-  return <Shell userId={session.user.id} />;
+  if (user === undefined) return <div className="boot" />;
+  // Só entra quem confirmou o e-mail (as regras do Firestore exigem o mesmo).
+  if (!user || !user.emailVerified) return <Auth />;
+  return <Shell userId={user.uid} />;
 }
 
 function Shell({ userId }: { userId: string }) {
@@ -97,27 +89,5 @@ function Shell({ userId }: { userId: string }) {
       {sheet === "water" && <WaterSheet profile={profile} todayMl={todayMl} onClose={close} onSaved={bump} />}
       {sheet === "sleep" && <SleepSheet onClose={close} onSaved={saved} />}
     </div>
-  );
-}
-
-function NewPassword({ onDone }: { onDone: () => void }) {
-  const [password, setPassword] = useState("");
-  const [err, setErr] = useState("");
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const { error } = await supabase.auth.updateUser({ password });
-    if (error) return setErr(error.message);
-    onDone();
-  }
-  return (
-    <main className="auth">
-      <h1 className="wordmark">Nova senha</h1>
-      <form className="auth-form" onSubmit={submit}>
-        <label className="field"><span>Senha</span>
-          <input type="password" minLength={8} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
-        {err && <p className="note err">{err}</p>}
-        <button className="btn primary">Salvar</button>
-      </form>
-    </main>
   );
 }

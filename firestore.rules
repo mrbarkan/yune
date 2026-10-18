@@ -1,0 +1,104 @@
+rules_version = '2';
+
+// Yune — cada pessoa só lê e altera os próprios dados, e só depois de confirmar o e-mail.
+// Registros em users/{uid}/{coleção}; datas são strings ISO em UTC (new Date().toISOString()).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owner(uid) {
+      return request.auth != null && request.auth.uid == uid && request.auth.token.email_verified == true;
+    }
+    function d() { return request.resource.data; }
+    function iso(v) { return v is string && v.matches('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$'); }
+    function num(v, lo, hi) { return v is number && v >= lo && v <= hi; }
+    function optNum(v, lo, hi) { return v == null || num(v, lo, hi); }
+    function text(v, lo, hi) { return v is string && v.size() >= lo && v.size() <= hi; }
+    function hhmm(v) { return v is string && v.matches('^([01]\\d|2[0-3]):[0-5]\\d(:00)?$'); }
+
+    function validProfile() {
+      return d().keys().hasOnly(['name', 'sex', 'birth_year', 'height_cm', 'weight_kg', 'kcal_goal', 'water_goal_ml', 'sleep_goal_min', 'timezone'])
+        && (d().get('name', null) == null || text(d().name, 0, 80))
+        && d().get('sex', null) in [null, 'f', 'm']
+        && optNum(d().get('birth_year', null), 1900, 2100)
+        && optNum(d().get('height_cm', null), 50, 260)
+        && optNum(d().get('weight_kg', null), 20, 400)
+        && num(d().kcal_goal, 800, 6000)
+        && num(d().water_goal_ml, 250, 8000)
+        && num(d().sleep_goal_min, 180, 720)
+        && text(d().timezone, 1, 64);
+    }
+
+    function validReminders() {
+      return d().keys().hasOnly(['water_enabled', 'water_every_min', 'water_start', 'water_end', 'summary_enabled', 'summary_time',
+          'bedtime_enabled', 'bedtime_time', 'last_water_at', 'last_summary_date', 'last_bedtime_date'])
+        && d().water_enabled is bool && d().summary_enabled is bool && d().bedtime_enabled is bool
+        && num(d().water_every_min, 30, 480)
+        && hhmm(d().water_start) && hhmm(d().water_end) && hhmm(d().summary_time) && hhmm(d().bedtime_time);
+    }
+
+    function validItems(v) { return v == null || (v is list && v.size() <= 60); }
+
+    match /users/{uid} {
+      allow read: if owner(uid);
+      allow create, update: if owner(uid) && validProfile();
+
+      match /meals/{id} {
+        allow read, delete: if owner(uid);
+        allow create, update: if owner(uid)
+          && d().keys().hasOnly(['eaten_at', 'description', 'kcal', 'protein_g', 'carbs_g', 'fat_g', 'items', 'source', 'place', 'photo_path', 'created_at'])
+          && iso(d().eaten_at) && text(d().description, 1, 600) && d().kcal is int && num(d().kcal, 0, 10000)
+          && optNum(d().get('protein_g', null), 0, 2000) && optNum(d().get('carbs_g', null), 0, 2000) && optNum(d().get('fat_g', null), 0, 2000)
+          && validItems(d().get('items', null))
+          && d().source in ['ai', 'manual'] && d().place in ['casa', 'restaurante', 'delivery']
+          && (d().get('photo_path', null) == null || d().photo_path.matches('^meal-photos/' + uid + '/[^/]+$'));
+      }
+
+      match /activities/{id} {
+        allow read, delete: if owner(uid);
+        allow create, update: if owner(uid)
+          && d().keys().hasOnly(['started_at', 'kind', 'duration_min', 'intensity', 'kcal', 'note', 'created_at'])
+          && iso(d().started_at) && text(d().kind, 1, 60) && d().duration_min is int && num(d().duration_min, 1, 1440)
+          && d().intensity in ['leve', 'moderada', 'intensa'] && d().kcal is int && num(d().kcal, 0, 10000)
+          && (d().get('note', null) == null || text(d().note, 0, 300));
+      }
+
+      match /water/{id} {
+        allow read, delete: if owner(uid);
+        allow create, update: if owner(uid)
+          && d().keys().hasOnly(['drank_at', 'ml', 'created_at'])
+          && iso(d().drank_at) && d().ml is int && num(d().ml, 10, 3000);
+      }
+
+      // Registro aberto (wake_at nulo) = dormindo agora. Strings ISO em UTC comparam em ordem cronológica;
+      // as regras não convertem string em data, então o limite de 20 h fica no app (SleepSheet).
+      match /sleep/{id} {
+        allow read, delete: if owner(uid);
+        allow create, update: if owner(uid)
+          && d().keys().hasOnly(['bed_at', 'wake_at', 'created_at'])
+          && iso(d().bed_at) && (d().wake_at == null || (iso(d().wake_at) && d().wake_at > d().bed_at));
+      }
+
+      match /custom_foods/{id} {
+        allow read, delete: if owner(uid);
+        allow create, update: if owner(uid)
+          && d().keys().hasOnly(['name', 'brand', 'serving_label', 'serving_g', 'kcal', 'protein_g', 'carbs_g', 'fat_g', 'created_at'])
+          && text(d().name, 1, 120) && (d().get('brand', null) == null || text(d().brand, 0, 80)) && text(d().serving_label, 1, 80)
+          && d().serving_g is number && d().serving_g > 0 && d().serving_g <= 2000
+          && num(d().kcal, 0, 5000) && num(d().protein_g, 0, 2000) && num(d().carbs_g, 0, 2000) && num(d().fat_g, 0, 2000);
+      }
+
+      match /push_subscriptions/{id} {
+        allow read, delete: if owner(uid);
+        allow create, update: if owner(uid)
+          && d().keys().hasOnly(['endpoint', 'p256dh', 'auth', 'user_agent', 'created_at'])
+          && text(d().endpoint, 1, 1000) && text(d().p256dh, 1, 200) && text(d().auth, 1, 100);
+      }
+    }
+
+    match /reminders/{uid} {
+      allow read: if owner(uid);
+      allow create, update: if owner(uid) && validReminders();
+    }
+
+    // ai_usage e qualquer outra coleção: só as Cloud Functions (Admin SDK) acessam.
+  }
+}

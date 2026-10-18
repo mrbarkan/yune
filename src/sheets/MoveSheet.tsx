@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Segmented, Sheet } from "@/components/Sheet";
 import { ACTIVITIES, estimateBurn, type Intensity } from "@/lib/activity";
-import { supabase, type Profile } from "@/lib/supabase";
+import { addDoc } from "firebase/firestore";
+import { table, type Profile } from "@/lib/firebase";
 import { fromLocalInput, toLocalInput } from "@/lib/time";
 
 export function MoveSheet({ profile, onClose, onSaved }: { profile: Profile; onClose: () => void; onSaved: () => void }) {
@@ -17,11 +18,11 @@ export function MoveSheet({ profile, onClose, onSaved }: { profile: Profile; onC
 
   async function save() {
     setBusy(true);
-    const { error } = await supabase.from("activities").insert({
-      started_at: fromLocalInput(at), kind, duration_min: minutes, intensity, kcal,
-    });
+    const error = await addDoc(table("activities"), {
+      started_at: fromLocalInput(at), kind, duration_min: minutes, intensity, kcal, note: null, created_at: new Date().toISOString(),
+    }).then(() => null, () => "Não foi possível salvar.");
     setBusy(false);
-    if (error) return setErr(error.message);
+    if (error) return setErr(error);
     onSaved();
   }
 

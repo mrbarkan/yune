@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Segmented, Sheet } from "@/components/Sheet";
 import { SUPPLEMENTS, TACO, fromHistory, fromServing, norm, nutrition, searchFoods, type Food, type Portion } from "@/lib/foods";
 import { compressImage } from "@/lib/image";
-import { supabase, type CustomFood, type FoodItem, type Meal, type Place, type Profile } from "@/lib/supabase";
+import { addDoc, getDocs, limit, orderBy, query as q } from "firebase/firestore";
+import { ref, uploadBytes } from "firebase/storage";
+import { estimateFood, rows, storage, table, type CustomFood, type FoodItem, type Meal, type Place, type Profile } from "@/lib/firebase";
 import { fmtNum, fmtTime, fromLocalInput, toLocalInput } from "@/lib/time";
 
 type PlateItem = { id: string; food: Food; portion: Portion; qty: number; ai?: boolean };
@@ -52,8 +54,8 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
   const labelInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    supabase.from("meals").select("*").order("eaten_at", { ascending: false }).limit(80).then(({ data }) => {
-      const meals = (data ?? []) as Meal[];
+    getDocs(q(table("meals"), orderBy("eaten_at", "desc"), limit(80))).then((snap) => {
+      const meals = rows<Meal>(snap);
       const seen = new Set<string>();
       setRecentMeals(meals.filter((m) => m.items?.length && !seen.has(norm(m.description)) && seen.add(norm(m.description))).slice(0, 5));
       const items = meals.flatMap((m) => m.items ?? []);
@@ -61,8 +63,8 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
       for (const it of items) counts.set(norm(it.name), (counts.get(norm(it.name)) ?? 0) + 1);
       setHistory({ foods: fromHistory(items), counts });
     });
-    supabase.from("custom_foods").select("*").order("created_at", { ascending: false }).then(({ data }) =>
-      setCustom(((data ?? []) as CustomFood[]).map((c) => fromServing(`meu:${c.id}`, "meu", { ...c, brand: c.brand ?? "" }))),
+    getDocs(q(table("custom_foods"), orderBy("created_at", "desc"))).then((snap) =>
+      setCustom(rows<CustomFood>(snap).map((c) => fromServing(`meu:${c.id}`, "meu", { ...c, brand: c.brand ?? "" }))),
     );
   }, []);
 
@@ -88,11 +90,11 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
   async function estimate(description: string, image?: Photo | null) {
     setBusy("ai");
     setErr("");
-    const { data, error } = await supabase.functions.invoke("estimate-food", {
-      body: { mode: "meal", description, image: image ? { data: image.base64, media_type: "image/jpeg" } : undefined },
+    const data = await estimateFood<{ items?: FoodItem[]; notes: string }>({
+      mode: "meal", description, image: image ? { data: image.base64, media_type: "image/jpeg" } : undefined,
     });
     setBusy("");
-    if (error || data?.error) return setErr(data?.error ?? "Não foi possível calcular agora.");
+    if (data.error) return setErr(data.error);
     const items = (data.items ?? []) as FoodItem[];
     setNotes(items.length ? "" : data.notes);
     setPlate((p) => [...p, ...items.map((it) => ({ id: newId(), food: fromAiItem(it), portion: { label: it.quantity, g: it.grams || 100 }, qty: 1, ai: true }))]);
@@ -116,10 +118,10 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
     setErr("");
     try {
       const img = await compressImage(file, 1600, 0.88);
-      const { data, error } = await supabase.functions.invoke("estimate-food", {
-        body: { mode: "label", description: query.trim(), image: { data: img.base64, media_type: "image/jpeg" } },
+      const data = await estimateFood<Label>({
+        mode: "label", description: query.trim(), image: { data: img.base64, media_type: "image/jpeg" },
       });
-      if (error || data?.error) throw new Error(data?.error ?? "Não consegui ler o rótulo.");
+      if (data.error) throw new Error(data.error);
       setLabel(data as Label);
     } catch (e) {
       setErr((e as Error).message);
@@ -130,12 +132,17 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
 
   async function saveLabel() {
     if (!label) return;
-    const { data, error } = await supabase.from("custom_foods").insert({
+    const fields: Omit<CustomFood, "id"> = {
       name: label.name, brand: label.brand || null, serving_label: label.serving_label, serving_g: label.serving_g,
       kcal: label.kcal, protein_g: label.protein_g, carbs_g: label.carbs_g, fat_g: label.fat_g,
-    }).select().single();
-    if (error) return setErr(error.message);
-    const c = data as CustomFood;
+    };
+    let c: CustomFood;
+    try {
+      const doc = await addDoc(table("custom_foods"), { ...fields, created_at: new Date().toISOString() });
+      c = { ...fields, id: doc.id };
+    } catch {
+      return setErr("Confira os valores do rótulo.");
+    }
     const food = fromServing(`meu:${c.id}`, "meu", { ...c, brand: c.brand ?? "" });
     setCustom((list) => [food, ...list]);
     setLabel(null);
@@ -150,9 +157,8 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
     setErr("");
     let photo_path: string | null = null;
     if (photo) {
-      photo_path = `${profile.id}/${crypto.randomUUID()}.jpg`;
-      const up = await supabase.storage.from("meal-photos").upload(photo_path, photo.blob, { contentType: "image/jpeg" });
-      if (up.error) photo_path = null;
+      photo_path = `meal-photos/${profile.id}/${crypto.randomUUID()}.jpg`;
+      await uploadBytes(ref(storage, photo_path), photo.blob, { contentType: "image/jpeg" }).catch(() => (photo_path = null));
     }
     const items: FoodItem[] = lines.map((l) => ({
       name: l.food.name,
@@ -161,7 +167,7 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
       ...l.n,
     }));
     const sum = (k: "protein_g" | "carbs_g" | "fat_g") => Math.round(items.reduce((s, i) => s + i[k], 0) * 10) / 10;
-    const { error } = await supabase.from("meals").insert({
+    const error = await addDoc(table("meals"), {
       eaten_at: fromLocalInput(at),
       description: items.map((i) => i.name).join(", ").slice(0, 600) || mealName(new Date(at)),
       kcal: total,
@@ -172,9 +178,10 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
       source: plate.some((p) => p.ai) ? "ai" : "manual",
       place,
       photo_path,
-    });
+      created_at: new Date().toISOString(),
+    }).then(() => null, () => "Não foi possível salvar.");
     setBusy("");
-    if (error) return setErr(error.message);
+    if (error) return setErr(error);
     try {
       localStorage.setItem("yune:place", place);
     } catch {

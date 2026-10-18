@@ -1,4 +1,5 @@
-import { supabase } from "./supabase";
+import { deleteDoc, setDoc } from "firebase/firestore";
+import { row } from "./firebase";
 
 export const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 export const isStandalone = () =>
@@ -22,6 +23,12 @@ function b64ToUint8(base64: string) {
   return Uint8Array.from(raw, (c) => c.charCodeAt(0));
 }
 
+/** Um documento por aparelho: o id é o SHA-256 do endpoint. */
+async function subId(endpoint: string) {
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(endpoint));
+  return Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export async function enablePush() {
   const permission = await Notification.requestPermission();
   if (permission !== "granted") throw new Error("Permissão de notificação negada.");
@@ -33,17 +40,16 @@ export async function enablePush() {
       applicationServerKey: b64ToUint8(import.meta.env.VITE_VAPID_PUBLIC_KEY as string),
     }));
   const j = sub.toJSON();
-  const { error } = await supabase.from("push_subscriptions").upsert(
-    { endpoint: sub.endpoint, p256dh: j.keys!.p256dh, auth: j.keys!.auth, user_agent: navigator.userAgent },
-    { onConflict: "endpoint" },
-  );
-  if (error) throw error;
+  await setDoc(row("push_subscriptions", await subId(sub.endpoint)), {
+    endpoint: sub.endpoint, p256dh: j.keys!.p256dh, auth: j.keys!.auth, user_agent: navigator.userAgent,
+    created_at: new Date().toISOString(),
+  });
 }
 
 export async function disablePush() {
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.getSubscription();
   if (!sub) return;
-  await supabase.from("push_subscriptions").delete().eq("endpoint", sub.endpoint);
+  await deleteDoc(row("push_subscriptions", await subId(sub.endpoint)));
   await sub.unsubscribe();
 }

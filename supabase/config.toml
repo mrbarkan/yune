@@ -1,5 +1,0 @@
-[functions.estimate-food]
-verify_jwt = true
-
-[functions.send-reminders]
-verify_jwt = false

@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { Segmented } from "@/components/Sheet";
 import { suggestedGoal } from "@/lib/activity";
 import { disablePush, enablePush, isIOS, pushState, type PushState } from "@/lib/push";
-import { supabase, type Profile, type Reminders } from "@/lib/supabase";
+import { signOut } from "firebase/auth";
+import { getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { auth, DEFAULT_REMINDERS, profileDoc, remindersDoc, type Profile, type Reminders } from "@/lib/firebase";
 import { fmtNum } from "@/lib/time";
 
 export default function Settings({ profile, onSaved }: { profile: Profile; onSaved: () => void }) {
@@ -13,7 +15,7 @@ export default function Settings({ profile, onSaved }: { profile: Profile; onSav
   const suggestion = suggestedGoal(p);
 
   useEffect(() => {
-    supabase.from("reminders").select("*").eq("user_id", profile.id).single().then(({ data }) => setR(data as Reminders));
+    getDoc(remindersDoc(profile.id)).then((snap) => setR({ ...DEFAULT_REMINDERS, ...snap.data(), user_id: profile.id }));
     pushState().then(setPush).catch(() => setPush("unsupported"));
   }, [profile.id]);
 
@@ -21,14 +23,20 @@ export default function Settings({ profile, onSaved }: { profile: Profile; onSav
 
   async function saveProfile() {
     const { id, ...rest } = p;
-    const { error } = await supabase.from("profiles").update(rest).eq("id", id);
-    setMsg(error ? error.message : "Salvo.");
-    if (!error) onSaved();
+    try {
+      await updateDoc(profileDoc(id), rest);
+      setMsg("Salvo.");
+      onSaved();
+    } catch {
+      setMsg("Confira os valores e tente de novo.");
+    }
   }
 
   async function saveReminders(next: Reminders) {
     setR(next);
-    await supabase.from("reminders").update(next).eq("user_id", profile.id);
+    // Só as preferências: os campos last_* são do servidor (send-reminders).
+    const prefs = Object.fromEntries(Object.keys(DEFAULT_REMINDERS).map((k) => [k, next[k as keyof Reminders]]));
+    await setDoc(remindersDoc(next.user_id), prefs, { merge: true });
   }
 
   async function togglePush() {
@@ -134,7 +142,7 @@ export default function Settings({ profile, onSaved }: { profile: Profile; onSav
       </section>
 
       <section className="group">
-        <button className="btn ghost" onClick={() => supabase.auth.signOut()}>Sair</button>
+        <button className="btn ghost" onClick={() => signOut(auth)}>Sair</button>
         <p className="colophon">Yune · estimativas de calorias são aproximadas e não substituem orientação profissional.</p>
       </section>
     </main>

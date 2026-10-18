@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Sheet } from "@/components/Sheet";
-import { supabase, type Profile } from "@/lib/supabase";
+import { addDoc } from "firebase/firestore";
+import { table, type Profile } from "@/lib/firebase";
 import { fmtLiters } from "@/lib/time";
 
 export function WaterSheet({ profile, todayMl, onClose, onSaved }: { profile: Profile; todayMl: number; onClose: () => void; onSaved: () => void }) {
@@ -11,8 +12,9 @@ export function WaterSheet({ profile, todayMl, onClose, onSaved }: { profile: Pr
 
   async function add(ml: number) {
     if (!ml) return;
-    const { error } = await supabase.from("water").insert({ ml });
-    if (error) return setErr(error.message);
+    const error = await addDoc(table("water"), { ml, drank_at: new Date().toISOString(), created_at: new Date().toISOString() })
+      .then(() => null, () => "Quantidade inválida.");
+    if (error) return setErr(error);
     setTotal((t) => t + ml);
     navigator.vibrate?.(8);
     onSaved();

@@ -1,5 +1,18 @@
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import {
+  createUserWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, updateProfile,
+} from "firebase/auth";
+import { auth } from "@/lib/firebase";
+
+const ERRORS: Record<string, string> = {
+  "auth/invalid-credential": "E-mail ou senha incorretos.",
+  "auth/wrong-password": "E-mail ou senha incorretos.",
+  "auth/user-not-found": "E-mail ou senha incorretos.",
+  "auth/email-already-in-use": "Já existe uma conta com este e-mail.",
+  "auth/invalid-email": "E-mail inválido.",
+  "auth/weak-password": "Senha fraca demais.",
+  "auth/too-many-requests": "Muitas tentativas. Tente de novo em alguns minutos.",
+};
 
 export default function Auth() {
   const [mode, setMode] = useState<"in" | "up" | "reset">("in");
@@ -14,23 +27,28 @@ export default function Auth() {
     setBusy(true);
     setMsg(null);
     try {
+      const settings = { url: location.origin };
       if (mode === "in") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
+        const { user } = await signInWithEmailAndPassword(auth, email, password);
+        if (!user.emailVerified) {
+          await sendEmailVerification(user, settings);
+          await signOut(auth);
+          setMsg({ kind: "ok", text: "Confirme seu e-mail para entrar. Enviamos o link de novo." });
+        }
       } else if (mode === "up") {
-        const { data, error } = await supabase.auth.signUp({
-          email, password, options: { data: { name }, emailRedirectTo: location.origin },
-        });
-        if (error) throw error;
-        if (!data.session) setMsg({ kind: "ok", text: "Confira seu e-mail para confirmar a conta." });
+        const { user } = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(user, { displayName: name });
+        await sendEmailVerification(user, settings);
+        await signOut(auth);
+        setMsg({ kind: "ok", text: "Confira seu e-mail para confirmar a conta." });
+        setMode("in");
       } else {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: location.origin });
-        if (error) throw error;
+        await sendPasswordResetEmail(auth, email, settings).catch(() => {});
         setMsg({ kind: "ok", text: "Se houver uma conta, enviamos um link para redefinir a senha." });
       }
     } catch (err) {
-      const m = (err as Error).message;
-      setMsg({ kind: "err", text: m.includes("Invalid login") ? "E-mail ou senha incorretos." : m });
+      const code = (err as { code?: string }).code ?? "";
+      setMsg({ kind: "err", text: ERRORS[code] ?? (err as Error).message });
     } finally {
       setBusy(false);
     }

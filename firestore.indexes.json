@@ -1,0 +1,21 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "sleep",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "wake_at", "order": "ASCENDING" },
+        { "fieldPath": "bed_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sleep",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "wake_at", "order": "ASCENDING" },
+        { "fieldPath": "bed_at", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

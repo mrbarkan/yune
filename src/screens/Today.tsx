@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { Dial } from "@/components/Dial";
 import { splitByDay, totals, useRange } from "@/lib/data";
-import { supabase, type Meal, type Profile } from "@/lib/supabase";
+import { deleteDoc } from "firebase/firestore";
+import { deleteObject, getDownloadURL, ref } from "firebase/storage";
+import { row, storage, type Meal, type Profile, type Table } from "@/lib/firebase";
 import { addDays, fmtDayLong, fmtDuration, fmtLiters, fmtNum, fmtTime, sameDay, startOfDay } from "@/lib/time";
 
-type Entry = { id: string; table: string; at: string; kind: "food" | "move" | "water" | "sleep"; title: string; meta: string; meal?: Meal };
+type Entry = { id: string; table: Table; at: string; kind: "food" | "move" | "water" | "sleep"; title: string; meta: string; meal?: Meal };
 
 const PLACE_LABEL = { casa: "em casa", restaurante: "restaurante", delivery: "delivery" } as const;
 
@@ -22,28 +24,28 @@ export default function Today({ profile, version, onChange }: { profile: Profile
   useEffect(() => {
     const paths = photoKey ? photoKey.split("|") : [];
     if (!paths.length) return;
-    supabase.storage.from("meal-photos").createSignedUrls(paths, 3600).then(({ data: urls }) => {
-      setPhotos(Object.fromEntries((urls ?? []).filter((u) => u.signedUrl).map((u) => [u.path!, u.signedUrl as string])));
+    Promise.all(paths.map((p) => getDownloadURL(ref(storage, p)).then((url) => [p, url] as const).catch(() => null))).then((urls) => {
+      setPhotos(Object.fromEntries(urls.filter((u) => u !== null)));
     });
   }, [photoKey]);
 
   const entries: Entry[] = [
     ...data.meals.map((m) => ({
-      id: m.id, table: "meals", at: m.eaten_at, kind: "food" as const, title: m.description, meal: m,
+      id: m.id, table: "meals" as const, at: m.eaten_at, kind: "food" as const, title: m.description, meal: m,
       meta: [`${fmtNum(m.kcal)} kcal`, m.place && m.place !== "casa" ? PLACE_LABEL[m.place] : ""].filter(Boolean).join(" · "),
     })),
-    ...data.activities.map((a) => ({ id: a.id, table: "activities", at: a.started_at, kind: "move" as const, title: a.kind, meta: `${fmtDuration(a.duration_min)} · −${fmtNum(a.kcal)} kcal` })),
-    ...data.water.map((w) => ({ id: w.id, table: "water", at: w.drank_at, kind: "water" as const, title: "Água", meta: `${fmtNum(w.ml)} ml` })),
+    ...data.activities.map((a) => ({ id: a.id, table: "activities" as const, at: a.started_at, kind: "move" as const, title: a.kind, meta: `${fmtDuration(a.duration_min)} · −${fmtNum(a.kcal)} kcal` })),
+    ...data.water.map((w) => ({ id: w.id, table: "water" as const, at: w.drank_at, kind: "water" as const, title: "Água", meta: `${fmtNum(w.ml)} ml` })),
     ...data.sleep.map((s) => ({
-      id: s.id, table: "sleep", at: s.wake_at ?? s.bed_at, kind: "sleep" as const,
+      id: s.id, table: "sleep" as const, at: s.wake_at ?? s.bed_at, kind: "sleep" as const,
       title: s.wake_at ? `Sono · ${fmtTime(s.bed_at)}–${fmtTime(s.wake_at)}` : `Dormindo desde ${fmtTime(s.bed_at)}`,
       meta: s.wake_at ? fmtDuration((new Date(s.wake_at).getTime() - new Date(s.bed_at).getTime()) / 60_000) : "em curso",
     })),
   ].sort((a, b) => a.at.localeCompare(b.at));
 
   async function remove(e: Entry) {
-    await supabase.from(e.table).delete().eq("id", e.id);
-    if (e.meal?.photo_path) await supabase.storage.from("meal-photos").remove([e.meal.photo_path]);
+    await deleteDoc(row(e.table, e.id));
+    if (e.meal?.photo_path) await deleteObject(ref(storage, e.meal.photo_path)).catch(() => {});
     setConfirm(null);
     onChange();
   }

@@ -35,77 +35,72 @@ Os lembretes são enviados pelo servidor (Web Push), então chegam mesmo com o a
 ## Stack
 
 - React + TypeScript + Vite, CSS próprio (sem framework de UI)
-- Supabase: Auth (e-mail e senha), Postgres com RLS em todas as tabelas, Edge Functions, pg_cron
-- Claude Haiku (`estimate-food`) só quando a busca local não resolve: texto livre, foto do prato e leitura de rótulo.
+- Firebase: Authentication (e-mail e senha, com confirmação), Firestore com regras de segurança em todas as coleções,
+  Storage, Cloud Functions (2ª geração) e Cloud Scheduler
+- Claude Haiku (`estimateFood`) só quando a busca local não resolve: texto livre, foto do prato e leitura de rótulo.
   Limite de 80 chamadas por pessoa por dia.
 - Dados: Tabela TACO 4ª ed. (NEPA/Unicamp) via [taco-api](https://github.com/raulfdm/taco-api) (MIT);
   suplementos a partir das tabelas nutricionais publicadas pelos fabricantes e varejistas — confira o rótulo do seu.
-- Web Push com chaves VAPID (`send-reminders`)
+- Web Push com chaves VAPID (`sendReminders`)
 
 ## Como colocar no ar
 
-### 1. Supabase
+### 1. Firebase
 
-Crie um projeto em [supabase.com](https://supabase.com) e, nesta pasta:
+Crie um projeto em [console.firebase.google.com](https://console.firebase.google.com) no plano **Blaze**
+(Cloud Functions e o agendador exigem faturamento; o uso do Yune cabe na cota gratuita). Depois, no console:
+
+- *Authentication → Método de login*: ative **E-mail/senha**. Em *Configurações → Domínios autorizados*, adicione o domínio do app.
+- *Firestore Database*: crie o banco (região `southamerica-east1`, modo de produção).
+- *Storage*: ative o bucket padrão.
+- *Configurações do projeto → Seus apps*: crie um app da Web e copie a configuração para o `.env.local`.
+
+Nesta pasta:
 
 ```bash
-npx supabase login
-npx supabase link --project-ref SEU_REF
-npx supabase db push
+npm install -g firebase-tools
+firebase login
+firebase use --add                      # escolha o projeto
+npm --prefix functions install
+firebase deploy --only firestore,storage
 ```
-
-Em *Authentication → URL Configuration*, coloque a URL do app (ex.: `https://yune.vercel.app`) como Site URL.
-Em *Authentication → Providers → Email*, mantenha a confirmação de e-mail ligada.
 
 ### 2. Chaves e segredos
 
 ```bash
 npx web-push generate-vapid-keys          # gera a chave pública e a privada
 
-npx supabase secrets set \
-  ANTHROPIC_API_KEY=sk-ant-... \
-  VAPID_PUBLIC_KEY=... \
-  VAPID_PRIVATE_KEY=... \
-  VAPID_SUBJECT=mailto:voce@email.com \
-  CRON_SECRET=$(openssl rand -hex 24)
+firebase functions:secrets:set ANTHROPIC_API_KEY
+firebase functions:secrets:set VAPID_PUBLIC_KEY
+firebase functions:secrets:set VAPID_PRIVATE_KEY
+firebase functions:secrets:set VAPID_SUBJECT      # ex.: mailto:voce@email.com
 
-npx supabase functions deploy estimate-food
-npx supabase functions deploy send-reminders
+firebase deploy --only functions
 ```
 
-### 3. Agendar os lembretes (SQL Editor do Supabase)
+`sendReminders` roda sozinha a cada 5 minutos (o deploy cria o job no Cloud Scheduler).
 
-```sql
-create extension if not exists pg_cron;
-create extension if not exists pg_net;
+### 3. Frontend
 
-select cron.schedule('yune-reminders', '*/5 * * * *', $$
-  select net.http_post(
-    url := 'https://SEU_REF.supabase.co/functions/v1/send-reminders',
-    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-key', 'O_MESMO_CRON_SECRET'),
-    body := '{}'::jsonb
-  )
-$$);
+Defina as variáveis (veja `.env.example`) e publique no Firebase Hosting:
+
+```bash
+cp .env.example .env.local   # preencha com a configuração do app da Web e a chave pública VAPID
+npm run build
+firebase deploy --only hosting
 ```
 
-### 4. Frontend (Vercel)
-
-Importe o repositório na Vercel e defina as variáveis (veja `.env.example`):
-
-```
-VITE_SUPABASE_URL=https://SEU_REF.supabase.co
-VITE_SUPABASE_ANON_KEY=...
-VITE_VAPID_PUBLIC_KEY=...   # a mesma chave pública do passo 2
-```
+(Também funciona na Vercel: importe o repositório e defina as mesmas variáveis `VITE_*`.)
 
 Para rodar localmente: `cp .env.example .env.local`, preencha e `npm install && npm run dev`.
 
 ## Segurança
 
-- Cada tabela tem Row Level Security: cada pessoa só lê e altera os próprios registros.
-- A chave da Anthropic e a chave privada VAPID ficam só nos segredos do Supabase, nunca no frontend.
-- `estimate-food` exige usuário logado; `send-reminders` só responde ao cron com `x-cron-key`.
-- `daily_totals` e `bump_ai_usage` só podem ser chamadas pelo service role.
-- Fotos ficam num bucket privado (`meal-photos`), cada pessoa só acessa a própria pasta; o app exibe via URL assinada.
+- Regras do Firestore: cada pessoa só lê e altera os próprios registros (`users/{uid}/…`, `reminders/{uid}`),
+  e só depois de confirmar o e-mail. As regras também validam tipos e limites de cada campo.
+- A chave da Anthropic e a chave privada VAPID ficam só no Secret Manager, nunca no frontend.
+- `estimateFood` exige usuário logado com e-mail confirmado; `sendReminders` não tem URL pública (só o agendador a chama).
+- `ai_usage` só é acessível pelas Cloud Functions.
+- Fotos ficam no Storage em `meal-photos/<uid>/`; cada pessoa só lê e apaga a própria pasta.
 
 As estimativas de calorias são aproximadas e não substituem orientação profissional.

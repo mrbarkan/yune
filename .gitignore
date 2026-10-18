@@ -2,5 +2,8 @@ node_modules
 dist
 .env
 .env.local
-supabase/.temp
+.firebase
+.firebaserc
+firebase-debug.log
+firestore-debug.log
 .DS_Store

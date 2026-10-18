@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// Fotos dos pratos: uma pasta por pessoa (meal-photos/<uid>/<arquivo>), até 5 MB, só imagens.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /meal-photos/{uid}/{file} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+  }
+}

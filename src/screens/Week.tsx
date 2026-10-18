@@ -1,6 +1,6 @@
 import { Dial } from "@/components/Dial";
 import { splitByDay, totals, useRange } from "@/lib/data";
-import type { Profile } from "@/lib/supabase";
+import type { Profile } from "@/lib/firebase";
 import { addDays, fmtDuration, fmtLiters, fmtNum, fmtWeekday, startOfDay } from "@/lib/time";
 
 export default function Week({ profile, version }: { profile: Profile; version: number }) {

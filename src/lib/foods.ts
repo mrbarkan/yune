@@ -1,6 +1,6 @@
 import taco from "@/data/taco.json";
 import supplements from "@/data/supplements.json";
-import type { FoodItem } from "./supabase";
+import type { FoodItem } from "./firebase";
 
 export type Portion = { label: string; g: number };
 
