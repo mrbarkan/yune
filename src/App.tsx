@@ -92,7 +92,7 @@ function Shell({ userId }: { userId: string }) {
           </div>
         </div>
       )}
-      {sheet === "food" && <FoodSheet onClose={close} onSaved={saved} />}
+      {sheet === "food" && <FoodSheet profile={profile} onClose={close} onSaved={saved} />}
       {sheet === "move" && <MoveSheet profile={profile} onClose={close} onSaved={saved} />}
       {sheet === "water" && <WaterSheet profile={profile} todayMl={todayMl} onClose={close} onSaved={bump} />}
       {sheet === "sleep" && <SleepSheet onClose={close} onSaved={saved} />}

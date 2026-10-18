@@ -7,8 +7,14 @@ o arco violeta é o sono, os traços azuis são o movimento, os pontos vermelhos
 (o tamanho acompanha as calorias) e os riscos ciano são os copos d'água. No centro, quantas calorias faltam
 para a meta do dia.
 
-- **Comida** — descreva em português ("arroz, feijão, bife acebolado e salada") e o Claude estima as calorias
-  e macros de cada item (referência Tabela TACO). Dá para corrigir o número ou repetir refeições recentes com um toque.
+- **Comida** — feita para digitar o mínimo:
+  - busca instantânea e offline em ~500 alimentos da **Tabela TACO** + **31 suplementos** populares
+    (Supercoffee, whey, creatina, colágeno, barras, YoPRO…), com medidas caseiras (concha, colher de servir, unidade);
+  - atalhos de **Repetir** refeições e itens **Frequentes**; digitar só um número lança as calorias direto;
+  - **foto do prato** → a IA identifica os itens e porções;
+  - **foto do rótulo** → o produto vira um item seu, salvo para as próximas vezes;
+  - descreveu algo que a busca não achou? "Calcular" estima item por item;
+  - marca se foi em **casa, restaurante ou delivery** (lembra a última escolha).
 - **Movimento** — escolha a atividade, a duração e a intensidade; o gasto é estimado por METs e o seu peso
   (ou digite o número do relógio).
 - **Água** — botões de +150/250/350/500 ml.
@@ -30,7 +36,10 @@ Os lembretes são enviados pelo servidor (Web Push), então chegam mesmo com o a
 
 - React + TypeScript + Vite, CSS próprio (sem framework de UI)
 - Supabase: Auth (e-mail e senha), Postgres com RLS em todas as tabelas, Edge Functions, pg_cron
-- Claude API (`estimate-food`) para estimar calorias
+- Claude Haiku (`estimate-food`) só quando a busca local não resolve: texto livre, foto do prato e leitura de rótulo.
+  Limite de 80 chamadas por pessoa por dia.
+- Dados: Tabela TACO 4ª ed. (NEPA/Unicamp) via [taco-api](https://github.com/raulfdm/taco-api) (MIT);
+  suplementos a partir das tabelas nutricionais publicadas pelos fabricantes e varejistas — confira o rótulo do seu.
 - Web Push com chaves VAPID (`send-reminders`)
 
 ## Como colocar no ar
@@ -96,6 +105,7 @@ Para rodar localmente: `cp .env.example .env.local`, preencha e `npm install && 
 - Cada tabela tem Row Level Security: cada pessoa só lê e altera os próprios registros.
 - A chave da Anthropic e a chave privada VAPID ficam só nos segredos do Supabase, nunca no frontend.
 - `estimate-food` exige usuário logado; `send-reminders` só responde ao cron com `x-cron-key`.
-- `daily_totals` só pode ser chamada pelo service role.
+- `daily_totals` e `bump_ai_usage` só podem ser chamadas pelo service role.
+- Fotos ficam num bucket privado (`meal-photos`), cada pessoa só acessa a própria pasta; o app exibe via URL assinada.
 
 As estimativas de calorias são aproximadas e não substituem orientação profissional.

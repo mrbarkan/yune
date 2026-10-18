@@ -19,7 +19,21 @@ export type Profile = {
   timezone: string;
 };
 
-export type FoodItem = { name: string; quantity: string; kcal: number; protein_g: number; carbs_g: number; fat_g: number };
+export type FoodItem = { name: string; quantity: string; grams: number; kcal: number; protein_g: number; carbs_g: number; fat_g: number };
+
+export type Place = "casa" | "restaurante" | "delivery";
+
+export type CustomFood = {
+  id: string;
+  name: string;
+  brand: string | null;
+  serving_label: string;
+  serving_g: number;
+  kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+};
 
 export type Meal = {
   id: string;
@@ -31,6 +45,8 @@ export type Meal = {
   fat_g: number | null;
   items: FoodItem[] | null;
   source: "ai" | "manual";
+  place: Place;
+  photo_path: string | null;
 };
 
 export type Activity = {

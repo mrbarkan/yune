@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dial } from "@/components/Dial";
 import { splitByDay, totals, useRange } from "@/lib/data";
-import { supabase, type Profile } from "@/lib/supabase";
+import { supabase, type Meal, type Profile } from "@/lib/supabase";
 import { addDays, fmtDayLong, fmtDuration, fmtLiters, fmtNum, fmtTime, sameDay, startOfDay } from "@/lib/time";
 
-type Entry = { id: string; table: string; at: string; kind: "food" | "move" | "water" | "sleep"; title: string; meta: string };
+type Entry = { id: string; table: string; at: string; kind: "food" | "move" | "water" | "sleep"; title: string; meta: string; meal?: Meal };
+
+const PLACE_LABEL = { casa: "em casa", restaurante: "restaurante", delivery: "delivery" } as const;
 
 export default function Today({ profile, version, onChange }: { profile: Profile; version: number; onChange: () => void }) {
   const [day, setDay] = useState(() => startOfDay(new Date()));
@@ -14,9 +16,22 @@ export default function Today({ profile, version, onChange }: { profile: Profile
   const t = totals(data);
   const isToday = sameDay(day, new Date());
   const left = profile.kcal_goal - t.kcalIn + t.kcalOut;
+  const [photos, setPhotos] = useState<Record<string, string>>({});
+  const photoKey = data.meals.map((m) => m.photo_path).filter(Boolean).join("|");
+
+  useEffect(() => {
+    const paths = photoKey ? photoKey.split("|") : [];
+    if (!paths.length) return;
+    supabase.storage.from("meal-photos").createSignedUrls(paths, 3600).then(({ data: urls }) => {
+      setPhotos(Object.fromEntries((urls ?? []).filter((u) => u.signedUrl).map((u) => [u.path!, u.signedUrl as string])));
+    });
+  }, [photoKey]);
 
   const entries: Entry[] = [
-    ...data.meals.map((m) => ({ id: m.id, table: "meals", at: m.eaten_at, kind: "food" as const, title: m.description, meta: `${fmtNum(m.kcal)} kcal` })),
+    ...data.meals.map((m) => ({
+      id: m.id, table: "meals", at: m.eaten_at, kind: "food" as const, title: m.description, meal: m,
+      meta: [`${fmtNum(m.kcal)} kcal`, m.place && m.place !== "casa" ? PLACE_LABEL[m.place] : ""].filter(Boolean).join(" · "),
+    })),
     ...data.activities.map((a) => ({ id: a.id, table: "activities", at: a.started_at, kind: "move" as const, title: a.kind, meta: `${fmtDuration(a.duration_min)} · −${fmtNum(a.kcal)} kcal` })),
     ...data.water.map((w) => ({ id: w.id, table: "water", at: w.drank_at, kind: "water" as const, title: "Água", meta: `${fmtNum(w.ml)} ml` })),
     ...data.sleep.map((s) => ({
@@ -28,6 +43,7 @@ export default function Today({ profile, version, onChange }: { profile: Profile
 
   async function remove(e: Entry) {
     await supabase.from(e.table).delete().eq("id", e.id);
+    if (e.meal?.photo_path) await supabase.storage.from("meal-photos").remove([e.meal.photo_path]);
     setConfirm(null);
     onChange();
   }
@@ -83,7 +99,22 @@ export default function Today({ profile, version, onChange }: { profile: Profile
                 <span className="entry-title">{e.title}</span>
                 <span className="entry-meta">{e.meta}</span>
               </button>
+              {e.meal?.photo_path && photos[e.meal.photo_path] && confirm !== e.id && (
+                <img className="entry-thumb" src={photos[e.meal.photo_path]} alt="" />
+              )}
               {confirm === e.id && <button className="btn danger small" onClick={() => remove(e)}>Apagar</button>}
+              {confirm === e.id && e.meal && (
+                <div className="entry-detail">
+                  {e.meal.photo_path && photos[e.meal.photo_path] && <img src={photos[e.meal.photo_path]} alt="Foto do prato" />}
+                  {e.meal.items?.length ? (
+                    <ul>
+                      {e.meal.items.map((it, i) => (
+                        <li key={i}><span>{it.name} <small>{it.quantity}</small></span><span>{fmtNum(it.kcal)}</span></li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              )}
             </li>
           ))}
         </ol>
