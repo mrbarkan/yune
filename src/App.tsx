@@ -1,0 +1,123 @@
+import { useCallback, useEffect, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
+import { splitByDay, totals, useProfile, useRange } from "@/lib/data";
+import { startOfDay } from "@/lib/time";
+import Auth from "@/screens/Auth";
+import Today from "@/screens/Today";
+import Week from "@/screens/Week";
+import Settings from "@/screens/Settings";
+import { FoodSheet } from "@/sheets/FoodSheet";
+import { MoveSheet } from "@/sheets/MoveSheet";
+import { WaterSheet } from "@/sheets/WaterSheet";
+import { SleepSheet } from "@/sheets/SleepSheet";
+
+type Tab = "today" | "week" | "settings";
+type SheetKind = "menu" | "food" | "move" | "water" | "sleep" | null;
+
+export default function App() {
+  const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const [recovery, setRecovery] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s);
+      if (event === "PASSWORD_RECOVERY") setRecovery(true);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  if (session === undefined) return <div className="boot" />;
+  if (!session) return <Auth />;
+  if (recovery) return <NewPassword onDone={() => setRecovery(false)} />;
+  return <Shell userId={session.user.id} />;
+}
+
+function Shell({ userId }: { userId: string }) {
+  const { profile, reload } = useProfile(userId);
+  const [tab, setTab] = useState<Tab>("today");
+  const [sheet, setSheet] = useState<SheetKind>(null);
+  const [version, setVersion] = useState(0);
+  const bump = useCallback(() => setVersion((v) => v + 1), []);
+  const close = useCallback(() => setSheet(null), []);
+  const saved = useCallback(() => {
+    bump();
+    setSheet(null);
+  }, [bump]);
+
+  const { data: today } = useRange(startOfDay(new Date()), 1, version);
+  const todayMl = totals(splitByDay(today, new Date())).waterMl;
+
+  useEffect(() => {
+    const refresh = () => document.visibilityState === "visible" && bump();
+    document.addEventListener("visibilitychange", refresh);
+    return () => document.removeEventListener("visibilitychange", refresh);
+  }, [bump]);
+
+  if (!profile) return <div className="boot" />;
+
+  return (
+    <div className="app">
+      {tab === "today" && <Today profile={profile} version={version} onChange={bump} />}
+      {tab === "week" && <Week profile={profile} version={version} />}
+      {tab === "settings" && <Settings profile={profile} onSaved={() => { reload(); bump(); }} />}
+
+      <nav className="tabbar" aria-label="Navegação">
+        <button className={tab === "today" ? "on" : ""} onClick={() => setTab("today")}>Hoje</button>
+        <button className="fab" aria-label="Registrar" onClick={() => setSheet(sheet === "menu" ? null : "menu")}>
+          <span className={sheet === "menu" ? "plus open" : "plus"} />
+        </button>
+        <button className={tab === "week" ? "on" : ""} onClick={() => setTab("week")}>Semana</button>
+        <button className={tab === "settings" ? "on gear" : "gear"} onClick={() => setTab("settings")} aria-label="Ajustes">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden><circle cx="12" cy="12" r="3.2" /><circle cx="12" cy="12" r="8.5" strokeDasharray="2.6 2.1" /></svg>
+        </button>
+      </nav>
+
+      {sheet === "menu" && (
+        <div className="quick" onClick={close}>
+          <div className="quick-grid" onClick={(e) => e.stopPropagation()}>
+            {([
+              ["food", "Comida", "o que comi"],
+              ["move", "Movimento", "o que fiz"],
+              ["water", "Água", "um copo"],
+              ["sleep", "Sono", "dormir · acordar"],
+            ] as const).map(([k, label, hint], i) => (
+              <button key={k} className={`quick-item ${k}`} style={{ animationDelay: `${i * 35}ms` }} onClick={() => setSheet(k)}>
+                <i />
+                <b>{label}</b>
+                <small>{hint}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {sheet === "food" && <FoodSheet onClose={close} onSaved={saved} />}
+      {sheet === "move" && <MoveSheet profile={profile} onClose={close} onSaved={saved} />}
+      {sheet === "water" && <WaterSheet profile={profile} todayMl={todayMl} onClose={close} onSaved={bump} />}
+      {sheet === "sleep" && <SleepSheet onClose={close} onSaved={saved} />}
+    </div>
+  );
+}
+
+function NewPassword({ onDone }: { onDone: () => void }) {
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState("");
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return setErr(error.message);
+    onDone();
+  }
+  return (
+    <main className="auth">
+      <h1 className="wordmark">Nova senha</h1>
+      <form className="auth-form" onSubmit={submit}>
+        <label className="field"><span>Senha</span>
+          <input type="password" minLength={8} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+        {err && <p className="note err">{err}</p>}
+        <button className="btn primary">Salvar</button>
+      </form>
+    </main>
+  );
+}
