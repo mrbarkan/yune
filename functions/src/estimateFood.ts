@@ -113,6 +113,7 @@ export const estimateFood = onCall(
       if (!text || text.type !== "text") return { error: "Resposta vazia. Tente de novo." };
       return JSON.parse(text.text);
     } catch (err) {
+      console.error("estimateFood", err);
       if (err instanceof Anthropic.RateLimitError) return { error: "Muitas requisições. Tente em instantes." };
       if (err instanceof Anthropic.APIError) return { error: `Falha na estimativa (${err.status}).` };
       return { error: "Falha na estimativa." };
