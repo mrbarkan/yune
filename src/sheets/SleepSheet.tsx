@@ -8,19 +8,22 @@ const at = (base: Date, h: number, m = 0) => new Date(base.getFullYear(), base.g
 
 const MAX_SLEEP_MIN = 20 * 60;
 
-export function SleepSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+/** Nova noite (ou dormir/acordar agora), ou a noite `sleep` já salva para corrigir. */
+export function SleepSheet({ sleep, onClose, onSaved }: { sleep?: Sleep; onClose: () => void; onSaved: () => void }) {
   const today = startOfDay(new Date());
   const [open, setOpen] = useState<Sleep | null>(null);
-  const [bed, setBed] = useState(() => toLocalInput(at(addDays(today, -1), 23)));
-  const [wake, setWake] = useState(() => toLocalInput(at(today, 7)));
+  const [bed, setBed] = useState(() => toLocalInput(sleep ? new Date(sleep.bed_at) : at(addDays(today, -1), 23)));
+  // Registro aberto (dormindo agora): sugere acordar agora.
+  const [wake, setWake] = useState(() => toLocalInput(sleep ? (sleep.wake_at ? new Date(sleep.wake_at) : new Date()) : at(today, 7)));
   const [err, setErr] = useState("");
   const minutes = (new Date(wake).getTime() - new Date(bed).getTime()) / 60_000;
 
   useEffect(() => {
+    if (sleep) return;
     const since = new Date(Date.now() - 20 * 3_600_000).toISOString();
     getDocs(query(table("sleep"), where("wake_at", "==", null), where("bed_at", ">=", since), orderBy("bed_at", "desc"), limit(1)))
       .then((snap) => setOpen(rows<Sleep>(snap)[0] ?? null));
-  }, []);
+  }, [sleep]);
 
   // As regras do Firestore recusam horários inválidos (acordar antes de deitar, mais de 20 h).
   async function run(p: Promise<unknown>) {
@@ -37,7 +40,7 @@ export function SleepSheet({ onClose, onSaved }: { onClose: () => void; onSaved:
 
   return (
     <Sheet title="Sono" accent="sleep" onClose={onClose}>
-      {open ? (
+      {sleep ? null : open ? (
         <div className="sleep-now">
           <p className="lede">Dormindo desde <b>{fmtTime(open.bed_at)}</b></p>
           <button className="btn primary huge" onClick={() => run(updateDoc(row("sleep", open.id), { wake_at: new Date().toISOString() }))}>
@@ -50,7 +53,7 @@ export function SleepSheet({ onClose, onSaved }: { onClose: () => void; onSaved:
         </button>
       )}
 
-      <p className="divider"><span>ou registre a noite</span></p>
+      {!sleep && <p className="divider"><span>ou registre a noite</span></p>}
 
       <div className="row">
         <label className="field">
@@ -65,8 +68,10 @@ export function SleepSheet({ onClose, onSaved }: { onClose: () => void; onSaved:
       {err && <p className="note err">{err}</p>}
       <div className="actions">
         <button className="btn primary" disabled={minutes <= 0 || minutes >= MAX_SLEEP_MIN}
-          onClick={() => run(insert(fromLocalInput(bed), fromLocalInput(wake)))}>
-          Salvar · {minutes > 0 && minutes < MAX_SLEEP_MIN ? fmtDuration(minutes) : "—"}
+          onClick={() => run(sleep
+            ? updateDoc(row("sleep", sleep.id), { bed_at: fromLocalInput(bed), wake_at: fromLocalInput(wake) })
+            : insert(fromLocalInput(bed), fromLocalInput(wake)))}>
+          {sleep ? "Salvar alterações" : "Salvar"} · {minutes > 0 && minutes < MAX_SLEEP_MIN ? fmtDuration(minutes) : "—"}
         </button>
       </div>
     </Sheet>

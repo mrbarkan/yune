@@ -5,19 +5,23 @@ import { dietWarnings, mealFor } from "@/lib/diet";
 import { mealName } from "@/sheets/FoodSheet";
 import { deleteDoc } from "firebase/firestore";
 import { deleteObject, getDownloadURL, ref } from "firebase/storage";
-import { row, storage, type DietPlan, type Meal, type Profile, type Table } from "@/lib/firebase";
+import { row, storage, type Activity, type DietPlan, type Meal, type Profile, type Sleep, type Table, type Water } from "@/lib/firebase";
 import { addDays, fmtDayLong, fmtDuration, fmtLiters, fmtNum, fmtTime, sameDay, startOfDay } from "@/lib/time";
 
-type Entry = { id: string; table: Table; at: string; kind: "food" | "move" | "water" | "sleep"; title: string; meta: string; meal?: Meal };
+/** Registro já salvo que volta para a folha correspondente para ser corrigido. */
+export type EditTarget = { kind: "food"; rec: Meal } | { kind: "move"; rec: Activity } | { kind: "water"; rec: Water } | { kind: "sleep"; rec: Sleep };
+
+type Entry = { id: string; table: Table; at: string; kind: EditTarget["kind"]; title: string; meta: string; meal?: Meal; edit: EditTarget };
 
 const PLACE_LABEL = { casa: "em casa", restaurante: "restaurante", delivery: "delivery" } as const;
 
-export default function Today({ profile, version, onChange, plan, onOpenDiet }: {
+export default function Today({ profile, version, onChange, plan, onOpenDiet, onEdit }: {
   profile: Profile;
   version: number;
   onChange: () => void;
   plan: DietPlan | null;
   onOpenDiet: () => void;
+  onEdit: (t: EditTarget) => void;
 }) {
   const [day, setDay] = useState(() => startOfDay(new Date()));
   const [confirm, setConfirm] = useState<string | null>(null);
@@ -42,15 +46,16 @@ export default function Today({ profile, version, onChange, plan, onOpenDiet }: 
 
   const entries: Entry[] = [
     ...data.meals.map((m) => ({
-      id: m.id, table: "meals" as const, at: m.eaten_at, kind: "food" as const, title: m.description, meal: m,
+      id: m.id, table: "meals" as const, at: m.eaten_at, kind: "food" as const, title: m.description, meal: m, edit: { kind: "food" as const, rec: m },
       meta: [`${fmtNum(m.kcal)} kcal`, m.place && m.place !== "casa" ? PLACE_LABEL[m.place] : ""].filter(Boolean).join(" · "),
     })),
-    ...data.activities.map((a) => ({ id: a.id, table: "activities" as const, at: a.started_at, kind: "move" as const, title: a.kind, meta: `${fmtDuration(a.duration_min)} · −${fmtNum(a.kcal)} kcal` })),
-    ...data.water.map((w) => ({ id: w.id, table: "water" as const, at: w.drank_at, kind: "water" as const, title: "Água", meta: `${fmtNum(w.ml)} ml` })),
+    ...data.activities.map((a) => ({ id: a.id, table: "activities" as const, at: a.started_at, kind: "move" as const, title: a.kind, meta: `${fmtDuration(a.duration_min)} · −${fmtNum(a.kcal)} kcal`, edit: { kind: "move" as const, rec: a } })),
+    ...data.water.map((w) => ({ id: w.id, table: "water" as const, at: w.drank_at, kind: "water" as const, title: "Água", meta: `${fmtNum(w.ml)} ml`, edit: { kind: "water" as const, rec: w } })),
     ...data.sleep.map((s) => ({
       id: s.id, table: "sleep" as const, at: s.wake_at ?? s.bed_at, kind: "sleep" as const,
       title: s.wake_at ? `Sono · ${fmtTime(s.bed_at)}–${fmtTime(s.wake_at)}` : `Dormindo desde ${fmtTime(s.bed_at)}`,
       meta: s.wake_at ? fmtDuration((new Date(s.wake_at).getTime() - new Date(s.bed_at).getTime()) / 60_000) : "em curso",
+      edit: { kind: "sleep" as const, rec: s },
     })),
   ].sort((a, b) => a.at.localeCompare(b.at));
 
@@ -127,7 +132,12 @@ export default function Today({ profile, version, onChange, plan, onOpenDiet }: 
               {e.meal?.photo_path && photos[e.meal.photo_path] && confirm !== e.id && (
                 <img className="entry-thumb" src={photos[e.meal.photo_path]} alt="" />
               )}
-              {confirm === e.id && <button className="btn danger small" onClick={() => remove(e)}>Apagar</button>}
+              {confirm === e.id && (
+                <span className="entry-actions">
+                  <button className="btn small" onClick={() => { setConfirm(null); onEdit(e.edit); }}>Editar</button>
+                  <button className="btn danger small" onClick={() => remove(e)}>Apagar</button>
+                </span>
+              )}
               {confirm === e.id && e.meal && (
                 <div className="entry-detail">
                   {e.meal.photo_path && photos[e.meal.photo_path] && <img src={photos[e.meal.photo_path]} alt="Foto do prato" />}

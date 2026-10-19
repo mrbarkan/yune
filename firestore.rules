@@ -15,7 +15,8 @@ service cloud.firestore {
     function hhmm(v) { return v is string && v.matches('^([01]\\d|2[0-3]):[0-5]\\d(:00)?$'); }
 
     function validProfile() {
-      return d().keys().hasOnly(['name', 'sex', 'birth_year', 'height_cm', 'weight_kg', 'kcal_goal', 'water_goal_ml', 'sleep_goal_min', 'timezone'])
+      return d().keys().hasOnly(['name', 'sex', 'birth_year', 'height_cm', 'weight_kg', 'kcal_goal', 'water_goal_ml', 'sleep_goal_min', 'timezone',
+          'water_sizes'])
         && (d().get('name', null) == null || text(d().name, 0, 80))
         && d().get('sex', null) in [null, 'f', 'm']
         && optNum(d().get('birth_year', null), 1900, 2100)
@@ -24,7 +25,15 @@ service cloud.firestore {
         && num(d().kcal_goal, 800, 6000)
         && num(d().water_goal_ml, 250, 8000)
         && num(d().sleep_goal_min, 180, 720)
-        && text(d().timezone, 1, 64);
+        && text(d().timezone, 1, 64)
+        && (d().get('water_sizes', null) == null || validWaterSizes(d().water_sizes));
+    }
+
+    // Os quatro botões de água da folha Água (ml).
+    function validWaterSizes(v) {
+      return v is list && v.size() == 4
+        && v[0] is int && num(v[0], 10, 3000) && v[1] is int && num(v[1], 10, 3000)
+        && v[2] is int && num(v[2], 10, 3000) && v[3] is int && num(v[3], 10, 3000);
     }
 
     function validReminders() {

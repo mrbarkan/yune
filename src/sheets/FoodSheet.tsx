@@ -3,9 +3,9 @@ import { Segmented, Sheet } from "@/components/Sheet";
 import { COMMON, SUPPLEMENTS, TACO, fromHistory, fromServing, norm, nutrition, parseQuery, pickPortion, searchFoods, type Food, type Portion } from "@/lib/foods";
 import { compressImage } from "@/lib/image";
 import { dietWarnings, mealFor, optionKcal } from "@/lib/diet";
-import { addDoc, getDocs, limit, orderBy, query as q } from "firebase/firestore";
-import { ref, uploadBytes } from "firebase/storage";
-import { estimateFood, rows, storage, table, type CustomFood, type DietPlan, type FoodItem, type Meal, type Place, type Profile } from "@/lib/firebase";
+import { addDoc, getDocs, limit, orderBy, query as q, updateDoc } from "firebase/firestore";
+import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { estimateFood, row, rows, storage, table, type CustomFood, type DietPlan, type FoodItem, type Meal, type Place, type Profile } from "@/lib/firebase";
 import { fmtNum, fmtTime, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
 
 type PlateItem = { id: string; food: Food; portion: Portion; qty: number; ai?: boolean };
@@ -38,11 +38,32 @@ const lastPlace = (): Place => {
 let seq = 0;
 const newId = () => `p${++seq}`;
 
-export function FoodSheet({ profile, plan, onClose, onSaved }: { profile: Profile; plan: DietPlan | null; onClose: () => void; onSaved: () => void }) {
-  const [at, setAt] = useState(() => toLocalInput(new Date()));
-  const [place, setPlace] = useState<Place>(lastPlace);
+/** Itens de uma refeição salva → prato editável. Registros antigos sem itens viram um item só. */
+function plateFromMeal(m: Meal): PlateItem[] {
+  const items: FoodItem[] = m.items?.length ? m.items : [{
+    name: m.description, quantity: "porção", grams: 100, kcal: m.kcal, protein_g: m.protein_g ?? 0, carbs_g: m.carbs_g ?? 0, fat_g: m.fat_g ?? 0,
+  }];
+  return items.map((it) => ({ id: newId(), food: fromAiItem(it), portion: { label: it.quantity, g: it.grams || 100 }, qty: 1 }));
+}
+
+function fromAiItem(it: FoodItem): Food {
+  const [f] = fromHistory([{ ...it, grams: it.grams || 100 }]);
+  return { ...f, key: `ai:${newId()}`, source: "recente" };
+}
+
+/** Nova refeição, ou a refeição `meal` já salva para corrigir. */
+export function FoodSheet({ profile, plan, meal, onClose, onSaved }: {
+  profile: Profile;
+  plan: DietPlan | null;
+  meal?: Meal;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [at, setAt] = useState(() => toLocalInput(meal ? new Date(meal.eaten_at) : new Date()));
+  const [place, setPlace] = useState<Place>(() => meal?.place ?? lastPlace());
   const [query, setQuery] = useState("");
-  const [plate, setPlate] = useState<PlateItem[]>([]);
+  const [plate, setPlate] = useState<PlateItem[]>(() => (meal ? plateFromMeal(meal) : []));
+  const [savedPhoto, setSavedPhoto] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [label, setLabel] = useState<Label | null>(null);
@@ -89,10 +110,9 @@ export function FoodSheet({ profile, plan, onClose, onSaved }: { profile: Profil
     navigator.vibrate?.(6);
   };
 
-  const fromAiItem = (it: FoodItem): Food => {
-    const [f] = fromHistory([{ ...it, grams: it.grams || 100 }]);
-    return { ...f, key: `ai:${newId()}`, source: "recente" };
-  };
+  useEffect(() => {
+    if (meal?.photo_path) getDownloadURL(ref(storage, meal.photo_path)).then(setSavedPhoto, () => {});
+  }, [meal?.photo_path]);
 
   async function estimate(description: string, image?: Photo | null) {
     setBusy("ai");
@@ -163,10 +183,11 @@ export function FoodSheet({ profile, plan, onClose, onSaved }: { profile: Profil
   async function save() {
     setBusy("save");
     setErr("");
-    let photo_path: string | null = null;
+    let photo_path: string | null = meal?.photo_path ?? null;
     if (photo) {
-      photo_path = `meal-photos/${profile.id}/${crypto.randomUUID()}.jpg`;
-      await uploadBytes(ref(storage, photo_path), photo.blob, { contentType: "image/jpeg" }).catch(() => (photo_path = null));
+      const path = `meal-photos/${profile.id}/${crypto.randomUUID()}.jpg`;
+      const ok = await uploadBytes(ref(storage, path), photo.blob, { contentType: "image/jpeg" }).then(() => true, () => false);
+      if (ok) photo_path = path;
     }
     const items: FoodItem[] = lines.map((l) => ({
       name: l.food.name,
@@ -175,7 +196,7 @@ export function FoodSheet({ profile, plan, onClose, onSaved }: { profile: Profil
       ...l.n,
     }));
     const sum = (k: "protein_g" | "carbs_g" | "fat_g") => Math.round(items.reduce((s, i) => s + i[k], 0) * 10) / 10;
-    const error = await addDoc(table("meals"), {
+    const fields = {
       eaten_at: fromLocalInput(at),
       description: items.map((i) => i.name).join(", ").slice(0, 600) || mealName(new Date(at)),
       kcal: total,
@@ -183,13 +204,16 @@ export function FoodSheet({ profile, plan, onClose, onSaved }: { profile: Profil
       carbs_g: sum("carbs_g"),
       fat_g: sum("fat_g"),
       items,
-      source: plate.some((p) => p.ai) ? "ai" : "manual",
+      source: meal?.source === "ai" || plate.some((p) => p.ai) ? "ai" : "manual",
       place,
       photo_path,
-      created_at: new Date().toISOString(),
-    }).then(() => null, () => "Não foi possível salvar.");
+    };
+    const error = await (meal ? updateDoc(row("meals", meal.id), fields) : addDoc(table("meals"), { ...fields, created_at: new Date().toISOString() }))
+      .then(() => null, () => "Não foi possível salvar.");
     setBusy("");
     if (error) return setErr(error);
+    // Foto trocada na edição: a anterior sai do Storage.
+    if (meal?.photo_path && photo_path !== meal.photo_path) await deleteObject(ref(storage, meal.photo_path)).catch(() => {});
     try {
       localStorage.setItem("yune:place", place);
     } catch {
@@ -203,7 +227,7 @@ export function FoodSheet({ profile, plan, onClose, onSaved }: { profile: Profil
   const warnings = plan && plate.length
     ? dietWarnings(
         plan,
-        allMeals.filter((m) => sameDay(new Date(m.eaten_at), when)).flatMap((m) => m.items ?? []),
+        allMeals.filter((m) => m.id !== meal?.id && sameDay(new Date(m.eaten_at), when)).flatMap((m) => m.items ?? []),
         lines.map((l) => ({ name: l.food.name, grams: l.portion.g * l.qty, times: l.qty })),
       )
     : [];
@@ -349,7 +373,7 @@ export function FoodSheet({ profile, plan, onClose, onSaved }: { profile: Profil
 
       {(plate.length > 0 || photo) && (
         <div className="plate">
-          {photo && <img className="plate-photo" src={photo.preview} alt="Foto do prato" />}
+          {(photo || savedPhoto) && <img className="plate-photo" src={photo?.preview ?? savedPhoto!} alt="Foto do prato" />}
           <ul>
             {lines.map((l) => (
               <li key={l.id}>
@@ -364,10 +388,16 @@ export function FoodSheet({ profile, plan, onClose, onSaved }: { profile: Profil
                   <button onClick={() => update(l.id, { qty: l.qty + 0.5 })} aria-label="Mais">+</button>
                 </div>
                 <span className="num">{fmtNum(l.n.kcal)}</span>
+                {open === l.id && (
+                  <p className="plate-macros">
+                    {fmtG(l.portion.g * l.qty)} g · P {fmtG(l.n.protein_g)} g · C {fmtG(l.n.carbs_g)} g · G {fmtG(l.n.fat_g)} g
+                  </p>
+                )}
                 {open === l.id && <PortionPicker item={l} onPick={(portion, qty = l.qty) => update(l.id, { portion, qty })} />}
               </li>
             ))}
           </ul>
+          {plate.length > 0 && <Facts lines={lines} estimated={plate.some((p) => p.ai)} />}
           {notes && <p className="note">{notes}</p>}
         </div>
       )}
@@ -378,7 +408,7 @@ export function FoodSheet({ profile, plan, onClose, onSaved }: { profile: Profil
       {plate.length > 0 && (
         <div className="actions sticky">
           <button className="btn primary" disabled={!!busy} onClick={save}>
-            {busy === "save" ? "Salvando…" : `Salvar · ${fmtNum(total)} kcal`}
+            {busy === "save" ? "Salvando…" : `${meal ? "Salvar alterações" : "Salvar"} · ${fmtNum(total)} kcal`}
           </button>
         </div>
       )}
@@ -389,6 +419,35 @@ export function FoodSheet({ profile, plan, onClose, onSaved }: { profile: Profil
 const portionLabel = (p: Portion) => (/\d/.test(p.label) ? p.label : `${p.label} · ${fmtNum(p.g)} g`);
 const qtyLabel = (qty: number, p: Portion) => (qty === 1 ? p.label : `${String(qty).replace(".", ",")} × ${p.label}`);
 const same = (a: Portion, b: Portion) => a.label === b.label && a.g === b.g;
+const fmtG = (g: number) => g.toLocaleString("pt-BR", { maximumFractionDigits: g < 10 ? 1 : 0 });
+
+/** Tabela nutricional do prato: soma dos itens, com a parte de cada macro nas calorias. */
+function Facts({ lines, estimated }: { lines: { portion: Portion; qty: number; n: ReturnType<typeof nutrition> }[]; estimated: boolean }) {
+  const sum = (f: (l: (typeof lines)[number]) => number) => lines.reduce((s, l) => s + f(l), 0);
+  const kcal = sum((l) => l.n.kcal);
+  const macros = [
+    ["Proteína", sum((l) => l.n.protein_g), 4],
+    ["Carboidrato", sum((l) => l.n.carbs_g), 4],
+    ["Gordura", sum((l) => l.n.fat_g), 9],
+  ] as const;
+  return (
+    <section className="facts" aria-label="Tabela nutricional">
+      <header>
+        <p className="eyebrow">{estimated ? "Tabela nutricional · estimativa" : "Tabela nutricional"}</p>
+        <span>{fmtG(sum((l) => l.portion.g * l.qty))} g</span>
+      </header>
+      <dl>
+        <div><dt>Calorias</dt><dd>{fmtNum(kcal)} kcal</dd></div>
+        {macros.map(([name, g, perG]) => (
+          <div key={name}>
+            <dt>{name}</dt>
+            <dd>{fmtG(g)} g{kcal > 0 && <small>{Math.round((g * perG * 100) / kcal)}%</small>}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
 
 /** Medidas caseiras do alimento em botões, mais um campo para quem pesou. */
 function PortionPicker({ item, onPick }: { item: PlateItem; onPick: (p: Portion, qty?: number) => void }) {

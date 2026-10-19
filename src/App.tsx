@@ -6,7 +6,7 @@ import { useDietPlan } from "@/lib/diet";
 import { canUse, useEntitlements } from "@/lib/pro";
 import { startOfDay } from "@/lib/time";
 import Auth from "@/screens/Auth";
-import Today from "@/screens/Today";
+import Today, { type EditTarget } from "@/screens/Today";
 import Week from "@/screens/Week";
 import Settings from "@/screens/Settings";
 import { FoodSheet } from "@/sheets/FoodSheet";
@@ -35,13 +35,17 @@ function Shell({ userId }: { userId: string }) {
   const { profile, reload } = useProfile(userId);
   const [tab, setTab] = useState<Tab>("today");
   const [sheet, setSheet] = useState<SheetKind>(null);
+  const [edit, setEdit] = useState<EditTarget | null>(null);
   const [version, setVersion] = useState(0);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
-  const close = useCallback(() => setSheet(null), []);
+  const close = useCallback(() => {
+    setSheet(null);
+    setEdit(null);
+  }, []);
   const saved = useCallback(() => {
     bump();
-    setSheet(null);
-  }, [bump]);
+    close();
+  }, [bump, close]);
 
   const ent = useEntitlements(userId);
   const dietAllowed = canUse(ent, "diet");
@@ -59,7 +63,8 @@ function Shell({ userId }: { userId: string }) {
 
   return (
     <div className="app">
-      {tab === "today" && <Today profile={profile} version={version} onChange={bump} plan={plan} onOpenDiet={() => setSheet("diet")} />}
+      {tab === "today" && <Today profile={profile} version={version} onChange={bump} plan={plan} onOpenDiet={() => setSheet("diet")}
+        onEdit={setEdit} />}
       {tab === "week" && <Week profile={profile} version={version} />}
       {tab === "settings" && (
         <Settings profile={profile} onSaved={() => { reload(); bump(); }}
@@ -97,8 +102,12 @@ function Shell({ userId }: { userId: string }) {
       )}
       {sheet === "food" && <FoodSheet profile={profile} plan={plan} onClose={close} onSaved={saved} />}
       {sheet === "move" && <MoveSheet profile={profile} onClose={close} onSaved={saved} />}
-      {sheet === "water" && <WaterSheet profile={profile} todayMl={todayMl} onClose={close} onSaved={bump} />}
+      {sheet === "water" && <WaterSheet profile={profile} todayMl={todayMl} onClose={close} onSaved={bump} onProfile={reload} />}
       {sheet === "sleep" && <SleepSheet onClose={close} onSaved={saved} />}
+      {edit?.kind === "food" && <FoodSheet profile={profile} plan={plan} meal={edit.rec} onClose={close} onSaved={saved} />}
+      {edit?.kind === "move" && <MoveSheet profile={profile} activity={edit.rec} onClose={close} onSaved={saved} />}
+      {edit?.kind === "water" && <WaterSheet profile={profile} todayMl={todayMl} water={edit.rec} onClose={close} onSaved={saved} onProfile={reload} />}
+      {edit?.kind === "sleep" && <SleepSheet sleep={edit.rec} onClose={close} onSaved={saved} />}
       {sheet === "diet" && plan && <DietSheet plan={plan} onClose={close} />}
     </div>
   );

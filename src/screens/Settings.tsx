@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Segmented } from "@/components/Sheet";
+import { AboutSheet } from "@/sheets/AboutSheet";
 import { suggestedGoal } from "@/lib/activity";
 import { disablePush, enablePush, isIOS, pushState, type PushState } from "@/lib/push";
 import { signOut } from "firebase/auth";
@@ -18,6 +19,8 @@ export default function Settings({ profile, onSaved, diet }: { profile: Profile;
   const [r, setR] = useState<Reminders | null>(null);
   const [push, setPush] = useState<PushState>("off");
   const [msg, setMsg] = useState("");
+  const [about, setAbout] = useState(false);
+  const closeAbout = useCallback(() => setAbout(false), []);
   const suggestion = suggestedGoal(p);
 
   useEffect(() => {
@@ -28,7 +31,8 @@ export default function Settings({ profile, onSaved, diet }: { profile: Profile;
   const num = (v: string) => (v === "" ? null : Number(v.replace(",", ".")));
 
   async function saveProfile() {
-    const { id, ...rest } = p;
+    // water_sizes é salvo pela folha de Água; o estado local pode estar desatualizado.
+    const { id, water_sizes: _, ...rest } = p;
     try {
       await updateDoc(profileDoc(id), rest);
       setMsg("Salvo.");
@@ -101,7 +105,7 @@ export default function Settings({ profile, onSaved, diet }: { profile: Profile;
       <DietSection {...diet} profile={p} onGoals={async (goals) => {
         const next = { ...p, ...goals };
         setP(next);
-        const { id, ...rest } = next;
+        const { id, water_sizes: _, ...rest } = next;
         await updateDoc(profileDoc(id), rest).then(onSaved, () => setMsg("Confira os valores e tente de novo."));
       }} />
 
@@ -156,8 +160,10 @@ export default function Settings({ profile, onSaved, diet }: { profile: Profile;
 
       <section className="group">
         <button className="btn ghost" onClick={() => signOut(auth)}>Sair</button>
+        <button className="link" onClick={() => setAbout(true)}>Sobre o Yune</button>
         <p className="colophon">Yune · estimativas de calorias são aproximadas e não substituem orientação profissional.</p>
       </section>
+      {about && <AboutSheet onClose={closeAbout} />}
     </main>
   );
 }
