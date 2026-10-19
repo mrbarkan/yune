@@ -1,16 +1,24 @@
 import { useEffect, useState } from "react";
 import { Dial } from "@/components/Dial";
 import { splitByDay, totals, useRange } from "@/lib/data";
+import { dietWarnings, mealFor } from "@/lib/diet";
+import { mealName } from "@/sheets/FoodSheet";
 import { deleteDoc } from "firebase/firestore";
 import { deleteObject, getDownloadURL, ref } from "firebase/storage";
-import { row, storage, type Meal, type Profile, type Table } from "@/lib/firebase";
+import { row, storage, type DietPlan, type Meal, type Profile, type Table } from "@/lib/firebase";
 import { addDays, fmtDayLong, fmtDuration, fmtLiters, fmtNum, fmtTime, sameDay, startOfDay } from "@/lib/time";
 
 type Entry = { id: string; table: Table; at: string; kind: "food" | "move" | "water" | "sleep"; title: string; meta: string; meal?: Meal };
 
 const PLACE_LABEL = { casa: "em casa", restaurante: "restaurante", delivery: "delivery" } as const;
 
-export default function Today({ profile, version, onChange }: { profile: Profile; version: number; onChange: () => void }) {
+export default function Today({ profile, version, onChange, plan, onOpenDiet }: {
+  profile: Profile;
+  version: number;
+  onChange: () => void;
+  plan: DietPlan | null;
+  onOpenDiet: () => void;
+}) {
   const [day, setDay] = useState(() => startOfDay(new Date()));
   const [confirm, setConfirm] = useState<string | null>(null);
   const { data: raw, loading } = useRange(day, 1, version);
@@ -20,6 +28,9 @@ export default function Today({ profile, version, onChange }: { profile: Profile
   const left = profile.kcal_goal - t.kcalIn + t.kcalOut;
   const [photos, setPhotos] = useState<Record<string, string>>({});
   const photoKey = data.meals.map((m) => m.photo_path).filter(Boolean).join("|");
+  const warnings = plan ? dietWarnings(plan, data.meals.flatMap((m) => m.items ?? [])) : [];
+  const next = plan && isToday ? mealFor(plan, new Date(), mealName(new Date())) : null;
+  const target = plan?.targets;
 
   useEffect(() => {
     const paths = photoKey ? photoKey.split("|") : [];
@@ -81,9 +92,21 @@ export default function Today({ profile, version, onChange }: { profile: Profile
 
       {t.kcalIn > 0 && (
         <section className="macros" aria-label="Macronutrientes">
-          <Macro label="Proteína" g={t.protein} kcal={t.protein * 4} total={t.kcalIn} />
-          <Macro label="Carboidrato" g={t.carbs} kcal={t.carbs * 4} total={t.kcalIn} />
-          <Macro label="Gordura" g={t.fat} kcal={t.fat * 9} total={t.kcalIn} />
+          <Macro label="Proteína" g={t.protein} kcal={t.protein * 4} total={t.kcalIn} target={target?.protein_g} />
+          <Macro label="Carboidrato" g={t.carbs} kcal={t.carbs * 4} total={t.kcalIn} target={target?.carbs_g} />
+          <Macro label="Gordura" g={t.fat} kcal={t.fat * 9} total={t.kcalIn} target={target?.fat_g} />
+        </section>
+      )}
+
+      {plan && (
+        <section className="diet-today">
+          <button className="diet-card" onClick={onOpenDiet}>
+            <b>Dieta{next ? ` · ${next.name}` : ""}{next?.time ? ` às ${next.time}` : ""}</b>
+            <small>{next ? next.options[0]?.items.map((it) => it.name).join(", ") : plan.title}</small>
+          </button>
+          {warnings.map((w, i) => (
+            <p key={i} className="diet-warn">{w.text} <small>{w.items.join(", ")}</small></p>
+          ))}
         </section>
       )}
 
@@ -136,12 +159,12 @@ function Instrument({ kind, label, value, unit, sub, frac }: { kind: string; lab
   );
 }
 
-function Macro({ label, g, kcal, total }: { label: string; g: number; kcal: number; total: number }) {
+function Macro({ label, g, kcal, total, target }: { label: string; g: number; kcal: number; total: number; target?: number | null }) {
   return (
-    <div className="macro">
+    <div className={target != null && g > target ? "macro over" : "macro"}>
       <span className="m-pct">{Math.round((kcal / Math.max(total, 1)) * 100)}%</span>
       <span className="m-label">{label}</span>
-      <span className="m-g">{fmtNum(g)} g</span>
+      <span className="m-g">{fmtNum(g)}{target != null ? ` / ${fmtNum(target)}` : ""} g</span>
     </div>
   );
 }

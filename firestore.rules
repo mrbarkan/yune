@@ -86,6 +86,13 @@ service cloud.firestore {
           && num(d().kcal, 0, 5000) && num(d().protein_g, 0, 2000) && num(d().carbs_g, 0, 2000) && num(d().fat_g, 0, 2000);
       }
 
+      // Dieta prescrita: quem cria é a função importDietPlan; o app só lê, liga/desliga e apaga.
+      match /diet_plans/{id} {
+        allow read, delete: if owner(uid);
+        allow update: if owner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active'])
+          && request.resource.data.active is bool;
+      }
+
       match /push_subscriptions/{id} {
         allow read, delete: if owner(uid);
         allow create, update: if owner(uid)
@@ -97,6 +104,11 @@ service cloud.firestore {
     match /reminders/{uid} {
       allow read: if owner(uid);
       allow create, update: if owner(uid) && validReminders();
+    }
+
+    // Pro: { pro, until, source }. Só o servidor concede; a pessoa só lê o próprio.
+    match /entitlements/{uid} {
+      allow read: if owner(uid);
     }
 
     // ai_usage e qualquer outra coleção: só as Cloud Functions (Admin SDK) acessam.

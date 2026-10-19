@@ -10,6 +10,11 @@ PWA de diário de saúde (comida, movimento, água, sono). Todo texto de interfa
 - Cloud Functions em `functions/src` (Node 22): `estimateFood` é callable e devolve sempre um objeto (resultado ou `{ error }`).
 - Sono pertence ao dia em que se acorda; registro aberto (`wake_at` nulo) = dormindo agora.
 - Push: `public/sw.js` recebe; `functions/src/sendReminders.ts` envia (Web Push/VAPID, agendada a cada 5 min).
-- Comida: busca local primeiro (`src/lib/foods.ts`: TACO em `src/data/taco.json`, suplementos em `src/data/supplements.json`,
+- Comida: busca local primeiro (`src/lib/foods.ts`: TACO em `src/data/taco.json`, itens do dia a dia que a TACO não tem em
+  `src/data/common.json`, suplementos em `src/data/supplements.json`,
   itens próprios em `custom_foods`, histórico em `meals.items`). IA (`estimateFood`, Claude Haiku) só para texto livre, foto do prato e rótulo.
 - `meals.items[]` guarda `grams` por item — é o que permite reusar itens do histórico como atalhos.
+- Dieta prescrita (Pro): o app envia o arquivo para `diet-plans/{uid}/` no Storage (ou o texto colado) e chama `importDietPlan`,
+  que grava o plano em `users/{uid}/diet_plans` (só uma `active`; o app só liga/desliga e apaga). Avisos e "Pela dieta" em `src/lib/diet.ts`.
+- Pro: `entitlements/{uid}` só o servidor escreve. Recursos pagos em `FEATURES` (`src/lib/pro.ts`); no beta `PRO_OPEN = true`
+  em `src/lib/pro.ts` e `functions/src/pro.ts` (mudar os dois juntos).

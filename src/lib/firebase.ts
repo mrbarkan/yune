@@ -18,7 +18,7 @@ export const storage = getStorage(app);
 const functions = getFunctions(app, import.meta.env.VITE_FIREBASE_REGION || "southamerica-east1");
 
 /** Registros de cada pessoa ficam em users/{uid}/{coleção}. */
-export type Table = "meals" | "activities" | "water" | "sleep" | "custom_foods" | "push_subscriptions";
+export type Table = "meals" | "activities" | "water" | "sleep" | "custom_foods" | "push_subscriptions" | "diet_plans";
 
 const uid = () => {
   const u = auth.currentUser;
@@ -30,6 +30,7 @@ export const table = (name: Table) => collection(db, "users", uid(), name);
 export const row = (name: Table, id: string) => doc(db, "users", uid(), name, id);
 export const profileDoc = (id: string) => doc(db, "users", id);
 export const remindersDoc = (id: string) => doc(db, "reminders", id);
+export const entitlementsDoc = (id: string) => doc(db, "entitlements", id);
 
 export const rows = <T,>(snap: QuerySnapshot) => snap.docs.map((d) => ({ ...d.data(), id: d.id }) as T);
 
@@ -40,6 +41,16 @@ export async function estimateFood<T>(body: unknown): Promise<T & { error?: stri
     return res.data as T & { error?: string };
   } catch {
     return { error: "Não foi possível calcular agora." } as T & { error?: string };
+  }
+}
+
+/** Lê a dieta enviada (arquivo no Storage ou texto colado). Pode levar até um minuto. */
+export async function importDietPlan(body: { path: string; name: string } | { text: string }): Promise<{ id?: string; error?: string }> {
+  try {
+    const res = await httpsCallable(functions, "importDietPlan", { timeout: 300_000 })(body);
+    return res.data as { id?: string; error?: string };
+  } catch {
+    return { error: "Não foi possível ler a dieta agora." };
   }
 }
 
@@ -119,4 +130,35 @@ export type Reminders = {
   summary_time: string;
   bedtime_enabled: boolean;
   bedtime_time: string;
+};
+
+export type Entitlements = { pro: boolean; until: string | null; source?: string };
+
+export type DietRule = {
+  kind: "avoid" | "limit" | "prefer";
+  name: string;
+  detail: string;
+  max_per_day: number | null;
+  unit: "g" | "ml" | "vezes" | null;
+  keywords: string[];
+};
+
+export type DietMeal = { name: string; time: string | null; notes: string; options: { label: string; items: FoodItem[] }[] };
+
+/** Dieta prescrita, organizada pela função importDietPlan. Só uma fica ativa. */
+export type DietPlan = {
+  id: string;
+  title: string;
+  prescriber: string | null;
+  issued_on: string | null;
+  summary: string;
+  targets: { kcal: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null; fiber_g: number | null; water_ml: number | null };
+  meals: DietMeal[];
+  rules: DietRule[];
+  guidelines: string[];
+  notes: string;
+  active: boolean;
+  file_path: string | null;
+  file_name: string | null;
+  created_at: string;
 };

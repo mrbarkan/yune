@@ -185,12 +185,12 @@ input, textarea, select { font: inherit; color: inherit; }
 /* ---------- formulários ---------- */
 .field { display: grid; gap: 6px; min-width: 0; }
 .field > span { font: 500 10.5px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
-.field input, .field select, .big-input {
+.field input, .field select, .field textarea, .big-input {
   width: 100%; border: 0; border-bottom: 1px solid var(--line); background: transparent;
   padding: 10px 0; font-size: 17px; border-radius: 0; outline: none; transition: border-color 0.2s;
   -webkit-appearance: none; appearance: none;
 }
-.field input:focus, .field select:focus, .big-input:focus { border-color: var(--accent); }
+.field input:focus, .field select:focus, .field textarea:focus, .big-input:focus { border-color: var(--accent); }
 .big-input { font: 400 26px/1.25 var(--serif); resize: none; padding: 4px 0 12px; }
 .big-input::placeholder { color: var(--ink-3); opacity: 0.6; }
 .row { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; align-items: end; }
@@ -266,7 +266,14 @@ input, textarea, select { font: inherit; color: inherit; }
 .plate li { display: grid; grid-template-columns: 1fr auto 52px; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); animation: rise 0.35s var(--ease) both; }
 .plate-name { display: grid; gap: 2px; min-width: 0; }
 .plate-name b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.plate-name select { border: 0; background: none; padding: 0; font-size: 12px; color: var(--ink-3); -webkit-appearance: none; appearance: none; text-decoration: underline dotted; text-underline-offset: 3px; max-width: 100%; }
+.plate-name { text-align: left; }
+.plate-name small { font-size: 12px; color: var(--ink-3); text-decoration: underline dotted; text-underline-offset: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portion-pick { grid-column: 1 / -1; display: grid; gap: 10px; padding: 2px 0 6px; animation: rise 0.3s var(--ease) both; }
+.portion-pick .chip { min-height: 34px; font-size: 13px; }
+.grams { display: flex; align-items: baseline; gap: 6px; width: 120px; border-bottom: 1px solid var(--line); }
+.grams input { width: 100%; border: 0; background: none; padding: 6px 0; font: 500 15px var(--mono); outline: none; }
+.grams:focus-within { border-color: var(--accent); }
+.grams span { font-size: 13px; color: var(--ink-3); }
 .plate .num { font: 400 22px var(--serif); text-align: right; }
 .stepper { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 99px; height: 36px; }
 .stepper button { width: 34px; height: 34px; font-size: 18px; color: var(--ink-2); }
@@ -353,3 +360,38 @@ input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; bo
 @media (min-width: 720px) {
   .small-multiples { grid-template-columns: repeat(7, 1fr); }
 }
+
+/* ---------- dieta ---------- */
+.pro-badge { display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 99px; background: var(--accent); color: var(--paper); font: 500 9px/1.4 var(--mono); letter-spacing: 0.12em; vertical-align: 1px; }
+.diet-card { width: 100%; display: grid; gap: 3px; text-align: left; padding: 14px 16px; border-radius: 16px; background: var(--paper-2); }
+.diet-card b { font-weight: 500; }
+.diet-card small { font-size: 12px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diet-today { display: grid; gap: 8px; margin: 18px 0 4px; }
+.diet-warn { margin: 0; padding: 10px 14px; border-radius: 12px; font-size: 13px; color: var(--ink); background: color-mix(in srgb, var(--food) 14%, transparent); }
+.diet-warn small { display: block; color: var(--ink-3); font-size: 12px; margin-top: 2px; }
+.macro.over .m-g { color: var(--food); }
+.field textarea { font-size: 15px; line-height: 1.45; resize: vertical; color: inherit; }
+.diet-head { display: grid; gap: 6px; }
+.diet-head h3 { margin: 0; font: 400 24px/1.2 var(--serif); }
+.diet-targets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 10px; margin: 0; }
+.diet-targets div { display: grid; gap: 2px; }
+.diet-targets dt { font-size: 12px; color: var(--ink-3); }
+.diet-targets dd { margin: 0; font: 400 18px var(--serif); }
+.diet-meals { display: grid; }
+.diet-meals details { border-top: 1px solid var(--line); padding: 4px 0; }
+.diet-meals details:last-child { border-bottom: 1px solid var(--line); }
+.diet-meals summary { display: flex; align-items: baseline; gap: 8px; padding: 10px 0; cursor: pointer; list-style: none; }
+.diet-meals summary::-webkit-details-marker { display: none; }
+.diet-meals summary b { font-weight: 500; }
+.diet-meals summary time { margin-left: auto; font: 500 12px var(--mono); color: var(--ink-3); }
+.diet-now { font: 500 10px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--food); }
+.diet-option { padding: 0 0 10px; }
+.diet-option-label { margin: 6px 0 4px; font-size: 13px; color: var(--ink-2); }
+.diet-option-label em { font-style: normal; color: var(--ink-3); font-size: 12px; }
+.diet-option ul, .diet-rules ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.diet-option li { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.diet-option li small { color: var(--ink-3); font-size: 12px; text-align: right; }
+.diet-rules li { display: grid; gap: 1px; font-size: 14px; }
+.diet-rules li b { font-weight: 500; }
+.diet-rules li span { color: var(--ink-2); font-size: 13px; }
+.diet-rules.avoid .eyebrow { color: var(--food); }

@@ -1,6 +1,7 @@
 rules_version = '2';
 
 // Fotos dos pratos: uma pasta por pessoa (meal-photos/<uid>/<arquivo>), até 5 MB, só imagens.
+// Dieta prescrita: diet-plans/<uid>/<arquivo>, até 10 MB, PDF, Word (.docx), texto ou foto.
 service firebase.storage {
   match /b/{bucket}/o {
     match /meal-photos/{uid}/{file} {
@@ -8,6 +9,13 @@ service firebase.storage {
       allow create: if request.auth != null && request.auth.uid == uid
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
+    match /diet-plans/{uid}/{file} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create: if request.auth != null && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('application/pdf|application/vnd[.]openxmlformats-officedocument[.]wordprocessingml[.]document|text/plain.*|image/(jpeg|png|webp)');
     }
   }
 }

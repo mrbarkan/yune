@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { onIdTokenChanged, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { splitByDay, totals, useProfile, useRange } from "@/lib/data";
+import { useDietPlan } from "@/lib/diet";
+import { canUse, useEntitlements } from "@/lib/pro";
 import { startOfDay } from "@/lib/time";
 import Auth from "@/screens/Auth";
 import Today from "@/screens/Today";
@@ -11,9 +13,10 @@ import { FoodSheet } from "@/sheets/FoodSheet";
 import { MoveSheet } from "@/sheets/MoveSheet";
 import { WaterSheet } from "@/sheets/WaterSheet";
 import { SleepSheet } from "@/sheets/SleepSheet";
+import { DietSheet } from "@/sheets/DietSheet";
 
 type Tab = "today" | "week" | "settings";
-type SheetKind = "menu" | "food" | "move" | "water" | "sleep" | null;
+type SheetKind = "menu" | "food" | "move" | "water" | "sleep" | "diet" | null;
 
 export default function App() {
   // Envolto num objeto: depois de confirmar o e-mail o Firebase devolve o mesmo User, só com token novo.
@@ -40,6 +43,9 @@ function Shell({ userId }: { userId: string }) {
     setSheet(null);
   }, [bump]);
 
+  const ent = useEntitlements(userId);
+  const dietAllowed = canUse(ent, "diet");
+  const plan = useDietPlan(dietAllowed, version);
   const { data: today } = useRange(startOfDay(new Date()), 1, version);
   const todayMl = totals(splitByDay(today, new Date())).waterMl;
 
@@ -53,9 +59,12 @@ function Shell({ userId }: { userId: string }) {
 
   return (
     <div className="app">
-      {tab === "today" && <Today profile={profile} version={version} onChange={bump} />}
+      {tab === "today" && <Today profile={profile} version={version} onChange={bump} plan={plan} onOpenDiet={() => setSheet("diet")} />}
       {tab === "week" && <Week profile={profile} version={version} />}
-      {tab === "settings" && <Settings profile={profile} onSaved={() => { reload(); bump(); }} />}
+      {tab === "settings" && (
+        <Settings profile={profile} onSaved={() => { reload(); bump(); }}
+          diet={{ allowed: dietAllowed, plan, onOpen: () => setSheet("diet"), onChanged: bump }} />
+      )}
 
       <nav className="tabbar" aria-label="Navegação">
         <button className={tab === "today" ? "on" : ""} onClick={() => setTab("today")}>Hoje</button>
@@ -86,10 +95,11 @@ function Shell({ userId }: { userId: string }) {
           </div>
         </div>
       )}
-      {sheet === "food" && <FoodSheet profile={profile} onClose={close} onSaved={saved} />}
+      {sheet === "food" && <FoodSheet profile={profile} plan={plan} onClose={close} onSaved={saved} />}
       {sheet === "move" && <MoveSheet profile={profile} onClose={close} onSaved={saved} />}
       {sheet === "water" && <WaterSheet profile={profile} todayMl={todayMl} onClose={close} onSaved={bump} />}
       {sheet === "sleep" && <SleepSheet onClose={close} onSaved={saved} />}
+      {sheet === "diet" && plan && <DietSheet plan={plan} onClose={close} />}
     </div>
   );
 }

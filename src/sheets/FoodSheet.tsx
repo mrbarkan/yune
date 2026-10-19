@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Segmented, Sheet } from "@/components/Sheet";
-import { SUPPLEMENTS, TACO, fromHistory, fromServing, norm, nutrition, searchFoods, type Food, type Portion } from "@/lib/foods";
+import { COMMON, SUPPLEMENTS, TACO, fromHistory, fromServing, norm, nutrition, parseQuery, pickPortion, searchFoods, type Food, type Portion } from "@/lib/foods";
 import { compressImage } from "@/lib/image";
+import { dietWarnings, mealFor, optionKcal } from "@/lib/diet";
 import { addDoc, getDocs, limit, orderBy, query as q } from "firebase/firestore";
 import { ref, uploadBytes } from "firebase/storage";
-import { estimateFood, rows, storage, table, type CustomFood, type FoodItem, type Meal, type Place, type Profile } from "@/lib/firebase";
-import { fmtNum, fmtTime, fromLocalInput, toLocalInput } from "@/lib/time";
+import { estimateFood, rows, storage, table, type CustomFood, type DietPlan, type FoodItem, type Meal, type Place, type Profile } from "@/lib/firebase";
+import { fmtNum, fmtTime, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
 
 type PlateItem = { id: string; food: Food; portion: Portion; qty: number; ai?: boolean };
 type Photo = { blob: Blob; base64: string; preview: string };
@@ -37,17 +38,19 @@ const lastPlace = (): Place => {
 let seq = 0;
 const newId = () => `p${++seq}`;
 
-export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onClose: () => void; onSaved: () => void }) {
+export function FoodSheet({ profile, plan, onClose, onSaved }: { profile: Profile; plan: DietPlan | null; onClose: () => void; onSaved: () => void }) {
   const [at, setAt] = useState(() => toLocalInput(new Date()));
   const [place, setPlace] = useState<Place>(lastPlace);
   const [query, setQuery] = useState("");
   const [plate, setPlate] = useState<PlateItem[]>([]);
+  const [open, setOpen] = useState<string | null>(null);
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [label, setLabel] = useState<Label | null>(null);
   const [busy, setBusy] = useState<"" | "ai" | "label" | "save">("");
   const [err, setErr] = useState("");
   const [notes, setNotes] = useState("");
   const [recentMeals, setRecentMeals] = useState<Meal[]>([]);
+  const [allMeals, setAllMeals] = useState<Meal[]>([]);
   const [custom, setCustom] = useState<Food[]>([]);
   const [history, setHistory] = useState<{ foods: Food[]; counts: Map<string, number> }>({ foods: [], counts: new Map() });
   const photoInput = useRef<HTMLInputElement>(null);
@@ -56,6 +59,7 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
   useEffect(() => {
     getDocs(q(table("meals"), orderBy("eaten_at", "desc"), limit(80))).then((snap) => {
       const meals = rows<Meal>(snap);
+      setAllMeals(meals);
       const seen = new Set<string>();
       setRecentMeals(meals.filter((m) => m.items?.length && !seen.has(norm(m.description)) && seen.add(norm(m.description))).slice(0, 5));
       const items = meals.flatMap((m) => m.items ?? []);
@@ -68,16 +72,19 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
     );
   }, []);
 
-  const pool = useMemo(() => [...custom, ...history.foods, ...SUPPLEMENTS, ...TACO], [custom, history.foods]);
-  const results = useMemo(() => searchFoods(query, pool), [query, pool]);
+  const pool = useMemo(() => [...custom, ...history.foods, ...SUPPLEMENTS, ...COMMON, ...TACO], [custom, history.foods]);
+  const parsed = useMemo(() => parseQuery(query), [query]);
+  const results = useMemo(() => searchFoods(parsed.text, pool), [parsed, pool]);
   const frequent = useMemo(
-    () => [...history.foods].sort((a, b) => (history.counts.get(b.search) ?? 0) - (history.counts.get(a.search) ?? 0)).slice(0, 8),
+    () => [...history.foods].sort((a, b) => (history.counts.get(norm(b.name)) ?? 0) - (history.counts.get(norm(a.name)) ?? 0)).slice(0, 8),
     [history],
   );
   const quickKcal = /^\d{1,4}$/.test(query.trim()) ? Number(query.trim()) : null;
 
   const add = (food: Food, opts: Partial<PlateItem> = {}) => {
-    setPlate((p) => [...p, { id: newId(), food, portion: food.portions[0], qty: 1, ...opts }]);
+    const id = newId();
+    setPlate((p) => [...p, { id, food, portion: food.portions[0], qty: 1, ...opts }]);
+    setOpen(id);
     setQuery("");
     navigator.vibrate?.(6);
   };
@@ -98,6 +105,7 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
     const items = (data.items ?? []) as FoodItem[];
     setNotes(items.length ? "" : data.notes);
     setPlate((p) => [...p, ...items.map((it) => ({ id: newId(), food: fromAiItem(it), portion: { label: it.quantity, g: it.grams || 100 }, qty: 1, ai: true }))]);
+    setOpen(null);
     setQuery("");
   }
 
@@ -162,7 +170,7 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
     }
     const items: FoodItem[] = lines.map((l) => ({
       name: l.food.name,
-      quantity: l.qty === 1 ? l.portion.label : `${String(l.qty).replace(".", ",")} × ${l.portion.label}`,
+      quantity: qtyLabel(l.qty, l.portion),
       grams: Math.round(l.portion.g * l.qty),
       ...l.n,
     }));
@@ -190,8 +198,18 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
     onSaved();
   }
 
-  const update = (id: string, patch: Partial<PlateItem>) => setPlate((p) => p.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   const when = new Date(at);
+  const dietMeal = plan ? mealFor(plan, when, mealName(when)) : null;
+  const warnings = plan && plate.length
+    ? dietWarnings(
+        plan,
+        allMeals.filter((m) => sameDay(new Date(m.eaten_at), when)).flatMap((m) => m.items ?? []),
+        lines.map((l) => ({ name: l.food.name, grams: l.portion.g * l.qty, times: l.qty })),
+      )
+    : [];
+
+  const update = (id: string, patch: Partial<PlateItem>) => setPlate((p) => p.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  const addResult = (f: Food) => add(f, { portion: pickPortion(f, parsed), qty: parsed.qty });
 
   return (
     <Sheet title={mealName(when)} accent="food" onClose={onClose}>
@@ -206,7 +224,11 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
       <div className="search">
         <input className="search-input" value={query} maxLength={600} placeholder="Buscar ou descrever…"
           onChange={(e) => setQuery(e.target.value)} enterKeyHint="search"
-          onKeyDown={(e) => e.key === "Enter" && query.trim().length > 2 && !results.length && estimate(query.trim())} />
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" || busy) return;
+            if (results.length) addResult(results[0]);
+            else if (query.trim().length > 2) estimate(query.trim());
+          }} />
         <button className="cam" onClick={() => photoInput.current?.click()} aria-label="Foto do prato" disabled={!!busy}>
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" /><circle cx="12" cy="13.5" r="3.6" /></svg>
         </button>
@@ -224,14 +246,17 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
               <span><b>{fmtNum(quickKcal)} kcal</b><small>só as calorias</small></span><em>+</em>
             </button></li>
           )}
-          {results.map((f) => (
-            <li key={f.key}>
-              <button onClick={() => add(f)}>
-                <span><b>{f.name}</b><small>{f.brand ? `${f.brand} · ` : ""}{f.portions[0].label}{f.source === "meu" ? " · meu item" : ""}</small></span>
-                <em>{fmtNum(nutrition(f, f.portions[0].g).kcal)}</em>
-              </button>
-            </li>
-          ))}
+          {results.map((f) => {
+            const portion = pickPortion(f, parsed);
+            return (
+              <li key={f.key}>
+                <button onClick={() => addResult(f)}>
+                  <span><b>{f.name}</b><small>{f.brand ? `${f.brand} · ` : ""}{qtyLabel(parsed.qty, { ...portion, label: portionLabel(portion) })}{f.source === "meu" ? " · meu item" : ""}</small></span>
+                  <em>{fmtNum(nutrition(f, portion.g * parsed.qty).kcal)}</em>
+                </button>
+              </li>
+            );
+          })}
           {query.trim().length > 2 && (
             <li className="ai-row">
               <button onClick={() => estimate(query.trim())} disabled={!!busy}>
@@ -247,6 +272,24 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
         </ul>
       ) : plate.length === 0 && !label ? (
         <div className="shortcuts">
+          {dietMeal && dietMeal.options.some((o) => o.items.length) && (
+            <div>
+              <p className="eyebrow">Pela dieta · {dietMeal.name}</p>
+              <div className="chips">
+                {dietMeal.options.filter((o) => o.items.length).map((o, i) => {
+                  const names = o.items.map((it) => it.name).join(", ");
+                  return (
+                    <button key={i} className="chip" onClick={() => {
+                      o.items.forEach((it) => add(fromAiItem(it), { portion: { label: it.quantity, g: it.grams || 100 } }));
+                      setOpen(null);
+                    }}>
+                      {names.length > 30 ? names.slice(0, 28) + "…" : names} <em>{fmtNum(optionKcal(o))}</em>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {recentMeals.length > 0 && (
             <div>
               <p className="eyebrow">Repetir</p>
@@ -310,14 +353,10 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
           <ul>
             {lines.map((l) => (
               <li key={l.id}>
-                <div className="plate-name">
+                <button className="plate-name" onClick={() => setOpen(open === l.id ? null : l.id)} aria-expanded={open === l.id}>
                   <b>{l.food.name}</b>
-                  <select value={l.food.portions.findIndex((p) => p.label === l.portion.label && p.g === l.portion.g)}
-                    onChange={(e) => update(l.id, { portion: l.food.portions[Number(e.target.value)] })} aria-label="Porção">
-                    {!l.food.portions.some((p) => p.label === l.portion.label && p.g === l.portion.g) && <option value={-1}>{l.portion.label}</option>}
-                    {l.food.portions.map((p, i) => <option key={i} value={i}>{p.label}{/\d/.test(p.label) ? "" : ` (${p.g} g)`}</option>)}
-                  </select>
-                </div>
+                  <small>{portionLabel(l.portion)}</small>
+                </button>
                 <div className="stepper">
                   <button onClick={() => (l.qty <= 0.5 ? setPlate((p) => p.filter((x) => x.id !== l.id)) : update(l.id, { qty: l.qty - 0.5 }))}
                     aria-label="Menos">{l.qty <= 0.5 ? "×" : "−"}</button>
@@ -325,6 +364,7 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
                   <button onClick={() => update(l.id, { qty: l.qty + 0.5 })} aria-label="Mais">+</button>
                 </div>
                 <span className="num">{fmtNum(l.n.kcal)}</span>
+                {open === l.id && <PortionPicker item={l} onPick={(portion, qty = l.qty) => update(l.id, { portion, qty })} />}
               </li>
             ))}
           </ul>
@@ -332,6 +372,7 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
         </div>
       )}
 
+      {warnings.map((w, i) => <p key={i} className="diet-warn">{w.text}</p>)}
       {err && <p className="note err">{err}</p>}
 
       {plate.length > 0 && (
@@ -342,5 +383,34 @@ export function FoodSheet({ profile, onClose, onSaved }: { profile: Profile; onC
         </div>
       )}
     </Sheet>
+  );
+}
+
+const portionLabel = (p: Portion) => (/\d/.test(p.label) ? p.label : `${p.label} · ${fmtNum(p.g)} g`);
+const qtyLabel = (qty: number, p: Portion) => (qty === 1 ? p.label : `${String(qty).replace(".", ",")} × ${p.label}`);
+const same = (a: Portion, b: Portion) => a.label === b.label && a.g === b.g;
+
+/** Medidas caseiras do alimento em botões, mais um campo para quem pesou. */
+function PortionPicker({ item, onPick }: { item: PlateItem; onPick: (p: Portion, qty?: number) => void }) {
+  const [grams, setGrams] = useState("");
+  const options = item.food.portions.some((p) => same(p, item.portion)) ? item.food.portions : [item.portion, ...item.food.portions];
+  const weighed = () => {
+    const g = Number(grams.replace(",", "."));
+    // Peso digitado é o total: a quantidade volta para 1.
+    if (g > 0 && g <= 5000) onPick({ label: `${fmtNum(g)} g`, g }, 1);
+  };
+  return (
+    <div className="portion-pick">
+      <div className="chips">
+        {options.map((p, i) => (
+          <button key={i} className={same(p, item.portion) ? "chip on" : "chip"} onClick={() => onPick(p)}>{portionLabel(p)}</button>
+        ))}
+      </div>
+      <label className="grams">
+        <input inputMode="decimal" placeholder="pesei" value={grams} onChange={(e) => setGrams(e.target.value)}
+          onBlur={weighed} onKeyDown={(e) => e.key === "Enter" && weighed()} aria-label="Gramas" />
+        <span>g</span>
+      </label>
+    </div>
   );
 }

@@ -1,10 +1,10 @@
 // Estima calorias de uma refeição (texto e/ou foto do prato) ou lê um rótulo nutricional.
 // Requer o segredo ANTHROPIC_API_KEY (firebase functions:secrets:set ANTHROPIC_API_KEY).
 import Anthropic from "@anthropic-ai/sdk";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { onCall } from "firebase-functions/v2/https";
 import { REGION } from "./region.js";
+import { bumpUsage } from "./usage.js";
 
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
 
@@ -61,17 +61,6 @@ const LABEL_SCHEMA = {
     notes: { type: "string" },
   },
 };
-
-/** Conta uma chamada do dia (UTC) e devolve o total. Só o Admin SDK escreve em ai_usage. */
-async function bumpUsage(uid: string) {
-  const db = getFirestore();
-  const ref = db.doc(`ai_usage/${uid}_${new Date().toISOString().slice(0, 10)}`);
-  return db.runTransaction(async (tx) => {
-    const calls = ((await tx.get(ref)).get("calls") as number | undefined ?? 0) + 1;
-    tx.set(ref, { user_id: uid, calls, updated_at: FieldValue.serverTimestamp() }, { merge: true });
-    return calls;
-  });
-}
 
 // Como as outras funções do Yune, devolve sempre um objeto: o resultado ou `{ error }`.
 export const estimateFood = onCall(
