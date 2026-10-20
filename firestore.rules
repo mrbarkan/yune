@@ -16,7 +16,7 @@ service cloud.firestore {
 
     function validProfile() {
       return d().keys().hasOnly(['name', 'sex', 'birth_year', 'height_cm', 'weight_kg', 'kcal_goal', 'water_goal_ml', 'sleep_goal_min', 'timezone',
-          'water_sizes'])
+          'water_sizes', 'photo_path'])
         && (d().get('name', null) == null || text(d().name, 0, 80))
         && d().get('sex', null) in [null, 'f', 'm']
         && optNum(d().get('birth_year', null), 1900, 2100)
@@ -26,7 +26,8 @@ service cloud.firestore {
         && num(d().water_goal_ml, 250, 8000)
         && num(d().sleep_goal_min, 180, 720)
         && text(d().timezone, 1, 64)
-        && (d().get('water_sizes', null) == null || validWaterSizes(d().water_sizes));
+        && (d().get('water_sizes', null) == null || validWaterSizes(d().water_sizes))
+        && (d().get('photo_path', null) == null || d().photo_path.matches('^profile-photos/' + request.auth.uid + '/[^/]+$'));
     }
 
     // Os quatro botões de água da folha Água (ml).
@@ -42,6 +43,13 @@ service cloud.firestore {
         && d().water_enabled is bool && d().summary_enabled is bool && d().bedtime_enabled is bool
         && num(d().water_every_min, 30, 480)
         && hhmm(d().water_start) && hhmm(d().water_end) && hhmm(d().summary_time) && hhmm(d().bedtime_time);
+    }
+
+    function validMeasurement() {
+      return d().keys().hasOnly(['measured_at', 'weight_kg', 'waist_cm', 'hip_cm', 'neck_cm', 'source', 'created_at'])
+        && iso(d().measured_at) && iso(d().created_at) && num(d().weight_kg, 20, 400)
+        && optNum(d().get('waist_cm', null), 30, 250) && optNum(d().get('hip_cm', null), 30, 250) && optNum(d().get('neck_cm', null), 20, 80)
+        && d().source in ['manual', 'body_comp'];
     }
 
     function validItems(v) { return v == null || (v is list && v.size() <= 60); }
@@ -102,6 +110,37 @@ service cloud.firestore {
           && request.resource.data.active is bool;
       }
 
+      // Medidas: o app cria e edita (created_at fixo). Fotos de evolução: só cria e apaga.
+      match /measurements/{id} {
+        allow read, delete: if owner(uid);
+        allow create: if owner(uid) && validMeasurement();
+        allow update: if owner(uid) && validMeasurement() && d().created_at == resource.data.created_at;
+      }
+
+      match /body_photos/{id} {
+        allow read, delete: if owner(uid);
+        allow create: if owner(uid)
+          && d().keys().hasOnly(['taken_at', 'pose', 'path', 'created_at'])
+          && iso(d().taken_at) && iso(d().created_at) && d().pose in ['frente', 'lado', 'costas']
+          && d().path is string && d().path.matches('^body-photos/' + uid + '/[^/]+$');
+      }
+
+      // Questionário de saúde: um documento por data (AAAA-MM-DD).
+      match /anamnesis/{day} {
+        allow read, delete: if owner(uid);
+        allow create, update: if owner(uid) && day.matches('^\\d{4}-\\d{2}-\\d{2}$')
+          && d().keys().hasOnly(['updated_at', 'answers'])
+          && iso(d().updated_at) && d().answers is map;
+      }
+
+      // Composição corporal e exames: quem grava é a função que lê o documento; o app só lê e apaga.
+      match /body_comp/{id} {
+        allow read, delete: if owner(uid);
+      }
+      match /lab_reports/{id} {
+        allow read, delete: if owner(uid);
+      }
+
       match /push_subscriptions/{id} {
         allow read, delete: if owner(uid);
         allow create, update: if owner(uid)
@@ -118,6 +157,11 @@ service cloud.firestore {
     // Pro: { pro, until, source }. Só o servidor concede; a pessoa só lê o próprio.
     match /entitlements/{uid} {
       allow read: if owner(uid);
+    }
+
+    // Cobrança (Stripe): sem acesso do cliente, só as Cloud Functions.
+    match /billing/{uid} {
+      allow read, write: if false;
     }
 
     // ai_usage e qualquer outra coleção: só as Cloud Functions (Admin SDK) acessam.
