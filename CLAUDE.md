@@ -24,6 +24,7 @@ PWA de diário de saúde (comida, movimento, água, sono). Todo texto de interfa
 - Perfil da paciente (subcoleções de `users/{uid}`): `measurements` (peso/cintura/quadril/pescoço, `created_at` obrigatório), `body_comp` e `lab_reports`
   (só leitura/apagar pelo app; o servidor grava), `body_photos`, `anamnesis/{AAAA-MM-DD}` (`{ updated_at, answers }`, chaves de `SECTIONS` em
   `src/lib/anamnesis.ts`; mesmo dia sobrescreve, outro dia cria versão). Storage: `profile-photos/{uid}`, `body-photos/{uid}/…`, `health-docs/{uid}/…`.
+- Baixar meus dados (grátis): `src/lib/fullExport.ts` monta o .zip no aparelho (fflate; `dados.json` + `LEIA-ME.txt` + originais do Storage via `getBlob`, em `arquivos/`). Fotos do corpo só se a pessoa marcar; `push_subscriptions` nunca entra.
 - Bioimpedância e exames (Pro): o app envia a foto/PDF para `health-docs/{uid}/`, chama `readHealthDoc` (devolve rascunho para conferir; nada é salvo)
   e depois `saveHealthDoc` (valida e grava em `body_comp` / `lab_reports`). Catálogo de exames em `src/data/labs.json` = `functions/src/labCodes.ts`.
 - Stripe (cartão, BRL): functions `createCheckout`, `createPortal`, `getProPrices`, `stripeWebhook` (`functions/src/billing.ts`). Segredos

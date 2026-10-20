@@ -17,6 +17,7 @@
     "dev:emu": "vite --host --mode emulator"
   },
   "dependencies": {
+    "fflate": "^0.8.3",
     "firebase": "^12.19.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.9",

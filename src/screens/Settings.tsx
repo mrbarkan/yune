@@ -213,12 +213,16 @@ function ProSection({ ent, tz, onPro }: { ent: Entitlements; tz: string; onPro: 
 }
 
 function ExportSection({ profile }: { profile: Profile }) {
-  const [busy, setBusy] = useState<"xlsx" | "pdf" | null>(null);
+  const [busy, setBusy] = useState<"xlsx" | "pdf" | "zip" | null>(null);
   const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
+  const [body, setBody] = useState(false);
+  const [prog, setProg] = useState<[number, number]>([0, 0]);
 
   async function run(kind: "xlsx" | "pdf") {
     setBusy(kind);
     setErr("");
+    setNote("");
     try {
       // Carregado só aqui: o código de exportação fica fora do pacote principal.
       const { downloadPdf, downloadXlsx, exportFileName, exportTables, loadExportData } = await import("@/lib/export");
@@ -235,14 +239,34 @@ function ExportSection({ profile }: { profile: Profile }) {
     }
   }
 
+  async function runZip() {
+    setBusy("zip");
+    setErr("");
+    setNote("");
+    setProg([0, 0]);
+    try {
+      const { downloadAll } = await import("@/lib/fullExport");
+      const { missing } = await downloadAll({ includeBody: body, tz: profile.timezone, onProgress: (d, t) => setProg([d, t]) });
+      if (missing > 0) setNote(`Pronto. ${missing} arquivo(s) não puderam ser baixados; veja arquivos_faltando em dados.json.`);
+    } catch (e) {
+      console.error("fullExport", e);
+      setErr("Não foi possível baixar agora. Tente de novo.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <section className="group">
       <h2 className="section-title">Seus dados</h2>
-      <p className="note">Baixe tudo o que você registrou. As fotos do corpo não entram: elas ficam só no app.</p>
+      <p className="note">Baixe tudo o que você registrou. A planilha e o PDF trazem os registros; o arquivo .zip traz também as fotos e documentos originais.</p>
       <div className="row">
         <button className="btn ghost" disabled={!!busy} onClick={() => run("xlsx")}>{busy === "xlsx" ? "Gerando…" : "Planilha (Excel)"}</button>
         <button className="btn ghost" disabled={!!busy} onClick={() => run("pdf")}>{busy === "pdf" ? "Gerando…" : "PDF"}</button>
       </div>
+      <Toggle label="Incluir fotos do corpo" on={body} onChange={setBody} />
+      <button className="btn ghost" disabled={!!busy} onClick={runZip}>{busy === "zip" ? `Baixando arquivos ${prog[0]}/${prog[1]}…` : "Baixar tudo (.zip)"}</button>
+      {note && <p className="note">{note}</p>}
       {err && <p className="note err">{err}</p>}
     </section>
   );
