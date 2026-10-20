@@ -214,6 +214,40 @@ export type Entitlements = {
   stripe?: StripeState | null;
 };
 
+/** Valor em centavos, como vem da Stripe; o app formata. */
+export type ProPrice = { amount: number; currency: string };
+/** `trial`: "7d" = 7 dias grátis; "beta" = o teste vai até o fim do beta; "none" = cobra já. */
+export type ProPrices = { monthly: ProPrice; annual: ProPrice; trial: "7d" | "beta" | "none" };
+
+/** Abre o Checkout da Stripe para assinar o Pro. */
+export async function createCheckout(plan: "monthly" | "annual"): Promise<{ url?: string; error?: string }> {
+  try {
+    const res = await httpsCallable(functions, "createCheckout")({ plan });
+    return res.data as { url?: string; error?: string };
+  } catch {
+    return { error: "Não foi possível abrir o pagamento agora." };
+  }
+}
+
+/** Portal do cliente da Stripe (trocar cartão, cancelar). */
+export async function createPortal(): Promise<{ url?: string; error?: string }> {
+  try {
+    const res = await httpsCallable(functions, "createPortal")();
+    return res.data as { url?: string; error?: string };
+  } catch {
+    return { error: "Não foi possível abrir a assinatura agora." };
+  }
+}
+
+export async function getProPrices(): Promise<ProPrices | { error: string }> {
+  try {
+    const res = await httpsCallable(functions, "getProPrices")();
+    return res.data as ProPrices | { error: string };
+  } catch {
+    return { error: "Não foi possível carregar os preços agora." };
+  }
+}
+
 export type DietRule = {
   kind: "avoid" | "limit" | "prefer";
   name: string;
