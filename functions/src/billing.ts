@@ -6,6 +6,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { onCall, onRequest } from "firebase-functions/v2/https";
 import Stripe from "stripe";
+import { DELETING_ERROR, isDeleting } from "./deleting.js";
 import { COUNTING, deriveEntitlement, isIncomplete, stripeStateFrom, trialFor, type StripeState, type Trial } from "./entitlement.js";
 import { MOCK_PRICES, mockBillingEnabled, mockCheckout, mockPortalUrl } from "./mockBilling.js";
 import { REGION } from "./region.js";
@@ -137,7 +138,6 @@ export const stripeWebhook = onRequest(
   },
 );
 
-import { DELETING_ERROR, isDeleting } from "./deleting.js";
 
 const NOT_SIGNED_IN = { error: "Faça login para continuar." };
 

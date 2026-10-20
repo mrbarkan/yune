@@ -206,6 +206,8 @@ export const importDietPlan = onCall(
           })),
           newId: () => col.doc().id,
           save: (docId, data) => db.runTransaction(async (tx) => {
+            // A leitura da IA pode levar minutos: confere a trava de exclusão de novo, dentro da transação.
+            if ((await tx.get(db.doc(`deleting/${uid}`))).exists) throw new Error(DELETING_ERROR);
             const active = await tx.get(col.where("active", "==", true));
             const plan = activation(
               { id: docId, created_at: data.created_at as string },
@@ -226,6 +228,7 @@ export const importDietPlan = onCall(
         },
       );
     } catch (err) {
+      if (err instanceof Error && err.message === DELETING_ERROR) return { error: DELETING_ERROR };
       console.error("importDietPlan: salvar", err instanceof Error ? err.name : "erro");
       return { error: "Falha ao salvar a dieta. Tente de novo." };
     }
