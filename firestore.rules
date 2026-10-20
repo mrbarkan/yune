@@ -4,8 +4,11 @@ rules_version = '2';
 // Registros em users/{uid}/{coleção}; datas são strings ISO em UTC (new Date().toISOString()).
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Escritas só enquanto não existe a trava deleting/{uid} (criada por deleteAccount): um token antigo, de outro
+    // aparelho, segue válido até ~1 h depois do deleteUser e não pode recriar dados. Leituras continuam.
     function owner(uid) {
-      return request.auth != null && request.auth.uid == uid && request.auth.token.email_verified == true;
+      return request.auth != null && request.auth.uid == uid && request.auth.token.email_verified == true
+        && (request.method in ['get', 'list'] || !exists(/databases/$(database)/documents/deleting/$(uid)));
     }
     function d() { return request.resource.data; }
     function iso(v) { return v is string && v.matches('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$'); }
@@ -175,6 +178,11 @@ service cloud.firestore {
 
     // Cobrança (Stripe): sem acesso do cliente, só as Cloud Functions.
     match /billing/{uid} {
+      allow read, write: if false;
+    }
+
+    // Trava de exclusão: { at }. Só o servidor grava (deleteAccount); fica depois da exclusão de propósito.
+    match /deleting/{uid} {
       allow read, write: if false;
     }
 

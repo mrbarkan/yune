@@ -1,5 +1,5 @@
 // Apagar a conta e todos os dados (direito de eliminação). Ordem: cliente na Stripe (cancela as assinaturas na hora),
-// arquivos, documentos, usuário do Auth. Se a Stripe falhar nada é apagado, e a pessoa pode tentar de novo.
+// trava deleting/{uid} (as regras passam a recusar escritas de tokens antigos; fica para sempre), arquivos, documentos, usuário do Auth. Se a Stripe falhar nada é apagado, e a pessoa pode tentar de novo.
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -27,6 +27,7 @@ export function checkDeleteRequest(auth: CheckAuth | undefined, data: unknown, n
 export type DeleteDeps = {
   customerId(uid: string): Promise<string | null>;
   deleteCustomer(id: string): Promise<void>;
+  lock(uid: string): Promise<void>;
   deleteFiles(prefix: string): Promise<void>;
   deleteDocs(uid: string): Promise<void>;
   deleteUser(uid: string): Promise<void>;
@@ -35,6 +36,7 @@ export type DeleteDeps = {
 export async function deleteAccountStep(uid: string, deps: DeleteDeps): Promise<void> {
   const customer = await deps.customerId(uid);
   if (customer) await deps.deleteCustomer(customer);
+  await deps.lock(uid);
   for (const prefix of STORAGE_PREFIXES) await deps.deleteFiles(`${prefix}/${uid}/`);
   await deps.deleteDocs(uid);
   await deps.deleteUser(uid);
@@ -59,6 +61,7 @@ function realDeps(): DeleteDeps {
       if (mockBillingEnabled()) return;
       await ignoring("resource_missing", () => new Stripe(STRIPE_SECRET_KEY.value()).customers.del(id));
     },
+    lock: async (uid) => { await db.doc(`deleting/${uid}`).set({ at: new Date().toISOString() }); },
     deleteFiles: async (prefix) => { await getStorage().bucket().deleteFiles({ prefix }); },
     deleteDocs: async (uid) => {
       await db.recursiveDelete(db.doc(`users/${uid}`));

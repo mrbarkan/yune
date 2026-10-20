@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
+import { deleteDoc, doc, setDoc } from "firebase/firestore";
 import { deleteObject, getBytes, listAll, ref, uploadBytes } from "firebase/storage";
 
 let env: RulesTestEnvironment;
@@ -8,6 +9,7 @@ let env: RulesTestEnvironment;
 beforeAll(async () => {
   env = await initializeTestEnvironment({
     projectId: "demo-yune",
+    firestore: { rules: readFileSync("firestore.rules", "utf8"), host: "127.0.0.1", port: 8085 },
     storage: { rules: readFileSync("storage.rules", "utf8"), host: "127.0.0.1", port: 9199 },
   });
 });
@@ -87,5 +89,25 @@ describe("regras: storage", () => {
         await assertSucceeds(deleteObject(ref(alice(), `${f}/alice/v.jpg`)));
       }
     });
+  });
+});
+
+describe("regras: storage com trava de exclusão", () => {
+  const lock = () => env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), "deleting/alice"), { at: "2026-10-20T12:00:00.000Z" }));
+  afterAll(() => env.withSecurityRulesDisabled((ctx) => deleteDoc(doc(ctx.firestore(), "deleting/alice"))));
+  it("com a trava, nenhuma pasta aceita envio; a leitura segue", async () => {
+    await seedFile("meal-photos/alice/old.jpg");
+    await lock();
+    for (const [p, t] of [["meal-photos/alice/a.jpg", "image/jpeg"], ["profile-photos/alice/a.jpg", "image/jpeg"], ["body-photos/alice/a.jpg", "image/jpeg"],
+      ["health-docs/alice/a.pdf", "application/pdf"], ["diet-plans/alice/a.pdf", "application/pdf"]]) {
+      await assertFails(put(alice(), p, 1024, t));
+    }
+    await assertSucceeds(getBytes(ref(alice(), "meal-photos/alice/old.jpg")));
+  });
+  it("sem a trava o envio funciona e outra pessoa não é afetada", async () => {
+    await env.withSecurityRulesDisabled((ctx) => deleteDoc(doc(ctx.firestore(), "deleting/alice")));
+    await assertSucceeds(put(alice(), "meal-photos/alice/a.jpg", 1024, "image/jpeg"));
+    await lock();
+    await assertSucceeds(put(bob(), "meal-photos/bob/a.jpg", 1024, "image/jpeg"));
   });
 });

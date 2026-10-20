@@ -27,6 +27,7 @@ describe("checkDeleteRequest", () => {
 
 function deps(calls: string[], opts: { customer?: string | null; failCustomer?: boolean } = {}): DeleteDeps {
   return {
+    lock: async (uid) => { calls.push(`lock:${uid}`); },
     customerId: async () => { calls.push("customerId"); return opts.customer === undefined ? "cus_1" : opts.customer; },
     deleteCustomer: async (id) => { calls.push(`deleteCustomer:${id}`); if (opts.failCustomer) throw new Error("stripe"); },
     deleteFiles: async (p) => { calls.push(`files:${p}`); },
@@ -36,11 +37,11 @@ function deps(calls: string[], opts: { customer?: string | null; failCustomer?: 
 }
 
 describe("deleteAccountStep", () => {
-  it("segue a ordem: cliente, Stripe, arquivos, dados, usuário", async () => {
+  it("segue a ordem: cliente, Stripe, trava, arquivos, dados, usuário", async () => {
     const calls: string[] = [];
     await deleteAccountStep("u1", deps(calls));
     expect(calls).toEqual([
-      "customerId", "deleteCustomer:cus_1",
+      "customerId", "deleteCustomer:cus_1", "lock:u1",
       ...STORAGE_PREFIXES.map((p) => `files:${p}/u1/`),
       "docs:u1", "user:u1",
     ]);
@@ -49,6 +50,7 @@ describe("deleteAccountStep", () => {
     const calls: string[] = [];
     await expect(deleteAccountStep("u1", deps(calls, { failCustomer: true }))).rejects.toThrow("stripe");
     expect(calls).toEqual(["customerId", "deleteCustomer:cus_1"]);
+    expect(calls.some((c) => c.startsWith("lock"))).toBe(false);
   });
   it("sem cliente na Stripe, não chama deleteCustomer", async () => {
     const calls: string[] = [];
