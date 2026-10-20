@@ -2,11 +2,22 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { canSave, toBodyCompDraft, toLabsDraft, validateBodyComp, validateLabReport } from "./healthDoc.js";
+import { canSave, parseDecimal, toBodyCompDraft, toLabsDraft, validateBodyComp, validateLabReport } from "./healthDoc.js";
 import { LAB_CODES } from "./labCodes.js";
 
 const result = (o: Record<string, string>) => ({ code: "glicemia", name: "Glicemia", value: "", unit: "", ref_low: "", ref_high: "", ref_text: "", ...o });
 const labs = (results: Record<string, string>[], collected_on = "2026-03-10") => toLabsDraft({ collected_on, lab: "", results });
+
+// Mesmos casos de src/lib/num.test.ts: as duas cópias precisam ler igual.
+describe("parseDecimal", () => {
+  it.each([
+    ["71,8", 71.8], ["1.412", 1412], ["1.412,5", 1412.5], ["0,36", 0.36], ["0.36", 0.36], ["2", 2], [" 82 cm", 82],
+    ["1.412 kcal", 1412], ["5 mg/dL", 5], ["12,5 %", 12.5], ["-1,5", -1.5], ["+3", 3],
+  ])("%s -> %s", (s, n) => expect(parseDecimal(s)).toBe(n));
+  it.each([
+    "", "abc", "<5", ">10", "≤ 0,5", "≥ 60", "1/80", "1:160", "10 a 20", "3,5 x 10^6", "1.412.5", "1,412.5", "-", "cm 82", "5 mg/dL 3",
+  ])("%j -> null", (s) => expect(parseDecimal(s)).toBeNull());
+});
 
 describe("toLabsDraft", () => {
   it("converte número em pt-BR e referências", () => {
@@ -20,6 +31,12 @@ describe("toLabsDraft", () => {
     const [r] = labs([result({ value: "<5" })]).results;
     expect(r.value).toBeNull();
     expect(r.value_text).toBe("<5");
+  });
+  it("valor com ≤ fica só como texto (não entra no gráfico nem na contagem)", () => {
+    const [r] = labs([result({ value: "≤ 0,5", ref_low: "", ref_high: "1/80" })]).results;
+    expect(r.value).toBeNull();
+    expect(r.value_text).toBe("≤ 0,5");
+    expect(r.ref_high).toBeNull();
   });
   it("valor não numérico fica só como texto", () => {
     const [r] = labs([result({ value: "Negativo" })]).results;

@@ -56,14 +56,15 @@ export const LABS_SCHEMA = {
   },
 };
 
-/** Cópia de parseDecimal (src/lib/num.ts): "1.412,5" → 1412.5, "0,36" → 0.36, "<5" ou "" → null. */
+/** Cópia de parseDecimal (src/lib/num.ts): "1.412,5" → 1412.5, "82 cm" → 82; "<5", "≥ 60", "1/80", "10 a 20" ou "" → null. */
 export function parseDecimal(s: string): number | null {
-  if (/[<>]/.test(s)) return null;
-  const t = s.replace(/[^\d.,-]/g, "");
-  if (!/\d/.test(t)) return null;
+  const m = /^([-+]?\d[\d.,]*)[\p{L}%µ\s/]*$/u.exec(s.trim());
+  if (!m) return null;
+  const t = m[1];
+  if (/,.*\./.test(t)) return null; // "1,412.5": vírgula antes do ponto é ambíguo
   let n: string;
   if (t.includes(",")) n = t.replace(/\./g, "").replace(",", ".");
-  else if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) n = t.replace(/\./g, "");
+  else if (/^[-+]?\d{1,3}(\.\d{3})+$/.test(t)) n = t.replace(/\./g, "");
   else n = t;
   const v = Number(n);
   return Number.isFinite(v) ? v : null;
