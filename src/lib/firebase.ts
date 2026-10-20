@@ -1,8 +1,8 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { collection, doc, getFirestore, type QuerySnapshot } from "firebase/firestore";
-import { getFunctions, httpsCallable } from "firebase/functions";
-import { getStorage } from "firebase/storage";
+import { connectAuthEmulator, getAuth } from "firebase/auth";
+import { collection, connectFirestoreEmulator, doc, getFirestore, type QuerySnapshot } from "firebase/firestore";
+import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
+import { connectStorageEmulator, getStorage } from "firebase/storage";
 
 const app = initializeApp({
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string,
@@ -16,6 +16,14 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 const functions = getFunctions(app, import.meta.env.VITE_FIREBASE_REGION || "southamerica-east1");
+
+// Com VITE_USE_EMULATORS=1 (.env.emulator) tudo aponta para os emuladores locais.
+if (import.meta.env.VITE_USE_EMULATORS === "1") {
+  connectAuthEmulator(auth, "http://127.0.0.1:9099");
+  connectFirestoreEmulator(db, "127.0.0.1", 8085);
+  connectStorageEmulator(storage, "127.0.0.1", 9199);
+  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+}
 
 /** Registros de cada pessoa ficam em users/{uid}/{coleção}. */
 export type Table = "meals" | "activities" | "water" | "sleep" | "custom_foods" | "push_subscriptions" | "diet_plans";
