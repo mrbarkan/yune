@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { DELETING_ERROR } from "./deleting.js";
 import { memDb } from "./testing/memDb.js";
 import { handleEvent, startCheckout, subscriptionTrial, syncCustomer } from "./billing.js";
 
@@ -170,6 +171,14 @@ describe("startCheckout", () => {
     },
   });
   const args = { uid: "u1", email: "a@b.c", plan: "monthly" as const, appUrl: "https://app.test", now };
+
+  it("conta em exclusão: erro, sem Stripe e sem escrita", async () => {
+    const stripe = fakeStripe();
+    const db = memDb({ "deleting/u1": { at: "2026-10-20T12:00:00.000Z" } });
+    expect(await startCheckout({ stripe, db }, args)).toEqual({ error: DELETING_ERROR });
+    expect(stripe.customers.create).not.toHaveBeenCalled();
+    expect(db.writes).toEqual([]);
+  });
 
   it("expira as sessões abertas antes de criar outra (não cobra duas vezes)", async () => {
     const stripe = fakeStripe({ open: [{ id: "cs_a" }, { id: "cs_b" }] });

@@ -5,6 +5,7 @@ import { defineSecret } from "firebase-functions/params";
 import { onCall } from "firebase-functions/v2/https";
 import { AI_CONSENT_ERROR, checkAiConsent } from "./consent.js";
 import { REGION } from "./region.js";
+import { DELETING_ERROR, isDeleting } from "./deleting.js";
 import { bumpUsage } from "./usage.js";
 
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
@@ -68,6 +69,7 @@ export const estimateFood = onCall(
   { region: REGION, secrets: [ANTHROPIC_API_KEY], memory: "512MiB", timeoutSeconds: 60 },
   async (req) => {
     if (!req.auth || req.auth.token.email_verified !== true) return { error: "Faça login para continuar." };
+    if (await isDeleting(req.auth.uid)) return { error: DELETING_ERROR };
     if (!(await checkAiConsent(req.auth.uid))) return { error: AI_CONSENT_ERROR, consent: "required" };
 
     const body = (req.data ?? {}) as Record<string, unknown>;

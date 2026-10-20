@@ -11,6 +11,7 @@ import { activation, replaceDiets } from "./dietReplace.js";
 import { fileContent } from "./files.js";
 import { isPro } from "./pro.js";
 import { REGION } from "./region.js";
+import { DELETING_ERROR, isDeleting } from "./deleting.js";
 import { bumpUsage } from "./usage.js";
 
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
@@ -147,6 +148,7 @@ export const importDietPlan = onCall(
   async (req) => {
     if (!req.auth || req.auth.token.email_verified !== true) return { error: "Faça login para continuar." };
     const uid = req.auth.uid;
+    if (await isDeleting(uid)) return { error: DELETING_ERROR };
     if (!(await checkAiConsent(uid))) return { error: AI_CONSENT_ERROR, consent: "required" };
     if (!(await isPro(uid))) return { error: "A dieta do nutricionista é um recurso Pro." };
 

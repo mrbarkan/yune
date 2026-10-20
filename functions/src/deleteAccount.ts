@@ -1,5 +1,6 @@
 // Apagar a conta e todos os dados (direito de eliminação). Ordem: cliente na Stripe (cancela as assinaturas na hora),
-// trava deleting/{uid} (as regras passam a recusar escritas de tokens antigos; fica para sempre), arquivos, documentos, usuário do Auth. Se a Stripe falhar nada é apagado, e a pessoa pode tentar de novo.
+// trava deleting/{uid} (as regras passam a recusar escritas de tokens antigos; fica para sempre), arquivos,
+// documentos, usuário do Auth. Se a Stripe falhar nada é apagado, e a pessoa pode tentar de novo.
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -12,6 +13,7 @@ import { REGION } from "./region.js";
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
 
 export const STORAGE_PREFIXES = ["meal-photos", "profile-photos", "body-photos", "health-docs", "diet-plans"] as const;
+export const LOCKED_ERROR = "A exclusão começou mas não terminou; tente de novo para concluir.";
 export const REAUTH_SECONDS = 600;
 
 type CheckAuth = { uid: string; token: { auth_time?: number } };
@@ -81,11 +83,14 @@ export const deleteAccount = onCall({ region: REGION, secrets: [STRIPE_SECRET_KE
   const bad = checkDeleteRequest(req.auth, req.data, Math.floor(Date.now() / 1000));
   if (bad) return bad;
   const uid = req.auth!.uid;
+  let locked = false;
   try {
-    await deleteAccountStep(uid, realDeps());
+    const deps = realDeps();
+    await deleteAccountStep(uid, { ...deps, lock: async (u) => { await deps.lock(u); locked = true; } });
     return { ok: true };
   } catch (err) {
     console.error("deleteAccount", uid, (err as Error | undefined)?.name, code(err));
+    if (locked) return { error: LOCKED_ERROR };
     return { error: "Não foi possível apagar agora. Parte dos dados pode já ter sido apagada; tente de novo para concluir." };
   }
 });

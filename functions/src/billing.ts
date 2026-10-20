@@ -137,6 +137,8 @@ export const stripeWebhook = onRequest(
   },
 );
 
+import { DELETING_ERROR, isDeleting } from "./deleting.js";
+
 const NOT_SIGNED_IN = { error: "Faça login para continuar." };
 
 /**
@@ -148,6 +150,7 @@ export async function startCheckout(
   a: { uid: string; email: string | undefined; plan: keyof typeof PRICES; appUrl: string; now: Date },
 ): Promise<{ url: string } | { error: string }> {
   const { stripe, db } = deps;
+  if (await isDeleting(a.uid, db)) return { error: DELETING_ERROR };
   const billingRef = db.doc(`billing/${a.uid}`);
   let customerId = (await billingRef.get()).get("customer_id") as string | undefined;
   if (customerId) {

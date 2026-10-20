@@ -1,5 +1,6 @@
 // Cobrança simulada para o passeio no navegador: SÓ no emulador de Functions, num projeto demo-*, sem STRIPE_SECRET_KEY.
 import { COUNTING, deriveEntitlement, trialFor, type StripeState, type Trial } from "./entitlement.js";
+import { DELETING_ERROR, isDeleting } from "./deleting.js";
 import type { Db } from "./billing.js"; // só tipo: sem import circular em runtime
 
 export function mockBillingEnabled(env: Record<string, string | undefined> = process.env): boolean {
@@ -29,6 +30,7 @@ export function mockStripeState(trial: Trial, betaUntil: string | null, plan: "m
 /** Grava entitlements pela mesma derivação do webhook, numa transação. Não grava customer_id (assim uma chave real depois não tenta sincronizar um customer falso). */
 export async function mockCheckout(db: Db, a: { uid: string; plan: "monthly" | "annual"; appUrl: string; now: Date }):
   Promise<{ url: string } | { error: string }> {
+  if (await isDeleting(a.uid, db)) return { error: DELETING_ERROR };
   const entRef = db.doc(`entitlements/${a.uid}`);
   const billingRef = db.doc(`billing/${a.uid}`);
   return db.runTransaction(async (tx) => {

@@ -50,8 +50,11 @@ export async function disablePush() {
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.getSubscription();
   if (!sub) return;
-  await deleteDoc(row("push_subscriptions", await subId(sub.endpoint)));
-  await sub.unsubscribe();
+  try {
+    await deleteDoc(row("push_subscriptions", await subId(sub.endpoint)));
+  } finally {
+    await sub.unsubscribe(); // mesmo se a exclusão do registro for negada (ex.: conta em exclusão)
+  }
 }
 
 /** Sair do app: tira este aparelho das notificações, esperando no máximo `ms`. */

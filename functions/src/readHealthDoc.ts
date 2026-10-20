@@ -11,6 +11,7 @@ import {
 } from "./healthDoc.js";
 import { isPro } from "./pro.js";
 import { REGION } from "./region.js";
+import { DELETING_ERROR, isDeleting } from "./deleting.js";
 import { bumpUsage } from "./usage.js";
 
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
@@ -52,6 +53,7 @@ export const readHealthDoc = onCall(
   async (req) => {
     if (!req.auth || req.auth.token.email_verified !== true) return { error: "Faça login para continuar." };
     const uid = req.auth.uid;
+    if (await isDeleting(uid)) return { error: DELETING_ERROR };
     if (!(await checkAiConsent(uid))) return { error: AI_CONSENT_ERROR, consent: "required" };
     const body = obj(req.data) ?? {};
     const mode = body.mode as Mode;
@@ -99,6 +101,7 @@ export const readHealthDoc = onCall(
 export const saveHealthDoc = onCall({ region: REGION }, async (req) => {
   if (!req.auth || req.auth.token.email_verified !== true) return { error: "Faça login para continuar." };
   const uid = req.auth.uid;
+  if (await isDeleting(uid)) return { error: DELETING_ERROR };
   const denied = canSave(await isPro(uid));
   if (denied) return { error: denied };
 
