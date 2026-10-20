@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Sheet } from "@/components/Sheet";
 import { addDoc, updateDoc } from "firebase/firestore";
 import { todayWaterMl } from "@/lib/data";
+import { waterView } from "@/lib/waterView";
 import { DEFAULT_WATER_SIZES, profileDoc, row, table, type Profile, type Water } from "@/lib/firebase";
 import { fmtLiters, fmtNum, fromLocalInput, toLocalInput } from "@/lib/time";
 
@@ -18,11 +19,12 @@ export function WaterSheet({ profile, water, onClose, onSaved, onProfile }: {
   const sizes = profile.water_sizes?.length === 4 ? profile.water_sizes : DEFAULT_WATER_SIZES;
   const [base, setBase] = useState<number | null>(null);
   const [added, setAdded] = useState(0);
+  const [failed, setFailed] = useState(false);
   const [custom, setCustom] = useState("");
   const [err, setErr] = useState("");
   const [editing, setEditing] = useState<string[] | null>(null);
-  const total = (base ?? 0) + added;
-  const frac = Math.min(total / profile.water_goal_ml, 1);
+  const view = waterView({ base, failed }, added);
+  const frac = Math.min((view.total ?? 0) / profile.water_goal_ml, 1);
 
   useEffect(() => {
     if (water) return;
@@ -31,7 +33,7 @@ export function WaterSheet({ profile, water, onClose, onSaved, onProfile }: {
       (ml) => alive && setBase(ml),
       () => {
         if (!alive) return;
-        setBase(0);
+        setFailed(true);
         setErr("Não foi possível carregar a água de hoje.");
       },
     );
@@ -65,9 +67,9 @@ export function WaterSheet({ profile, water, onClose, onSaved, onProfile }: {
 
   return (
     <Sheet title="Água" accent="water" onClose={onClose}>
-      <div className="glass" aria-label={`${fmtLiters(total)} de ${fmtLiters(profile.water_goal_ml)} litros`}>
+      <div className="glass" aria-label={view.total === null ? "Total de hoje indisponível" : `${fmtLiters(view.total)} de ${fmtLiters(profile.water_goal_ml)} litros`}>
         <div className="glass-fill" style={{ height: `${frac * 100}%` }} />
-        <span className="big-num">{base === null ? "—" : fmtLiters(total)}<small>/ {fmtLiters(profile.water_goal_ml)} L</small></span>
+        <span className="big-num">{view.total === null ? "—" : fmtLiters(view.total)}<small>/ {fmtLiters(profile.water_goal_ml)} L</small></span>
       </div>
 
       {editing ? (
@@ -90,7 +92,7 @@ export function WaterSheet({ profile, water, onClose, onSaved, onProfile }: {
         <>
           <div className="water-buttons">
             {sizes.map((ml, i) => (
-              <button key={i} className="btn ghost" onClick={() => add(ml)}>+{fmtNum(ml)}<small>ml</small></button>
+              <button key={i} className="btn ghost" disabled={!view.canAdd} onClick={() => add(ml)}>+{fmtNum(ml)}<small>ml</small></button>
             ))}
           </div>
           <button className="link" onClick={() => setEditing(sizes.map(String))}>Ajustar copos</button>
@@ -99,10 +101,11 @@ export function WaterSheet({ profile, water, onClose, onSaved, onProfile }: {
               <span>Outra quantidade (ml)</span>
               <input inputMode="numeric" value={custom} onChange={(e) => setCustom(e.target.value.replace(/\D/g, ""))} />
             </label>
-            <button className="btn" disabled={!custom} onClick={() => { add(Number(custom)); setCustom(""); }}>Adicionar</button>
+            <button className="btn" disabled={!custom || !view.canAdd} onClick={() => { add(Number(custom)); setCustom(""); }}>Adicionar</button>
           </div>
         </>
       )}
+      {view.onlyAdded !== null && <p className="note">+{fmtNum(view.onlyAdded)} ml registrados</p>}
       {err && <p className="note err">{err}</p>}
     </Sheet>
   );
