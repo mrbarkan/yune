@@ -2,6 +2,10 @@ import { useCallback, useState } from "react";
 import { PrivateImage } from "@/components/PrivateImage";
 import { canUse } from "@/lib/pro";
 import type { DietPlan, Entitlements, Profile as ProfileData } from "@/lib/firebase";
+import { LineChart } from "@/components/LineChart";
+import { bmi, waistHeight } from "@/lib/health";
+import { changeSince, useMeasurements } from "@/lib/measurements";
+import MeasurementsView, { f1 } from "@/screens/MeasurementsView";
 import Settings from "@/screens/Settings";
 import { ProfileEditSheet } from "@/sheets/ProfileEditSheet";
 
@@ -44,16 +48,34 @@ export function Card({ label, action, locked, onOpen, onPro, half, children }: {
   );
 }
 
-export default function Profile({ profile, ent, onSaved, onPro, diet, goal }: Props) {
+export default function Profile({ profile, ent, version, onSaved, onPro, diet, goal }: Props) {
   const [settings, setSettings] = useState(false);
+  const [meas, setMeas] = useState<"" | "view" | "add">("");
+  const [mv, setMv] = useState(0);
+  const list = useMeasurements(version + mv);
   const [edit, setEdit] = useState(false);
   const closeEdit = useCallback(() => setEdit(false), []);
-  // Os cartões abrem os detalhes nas próximas tarefas.
+  // Os demais cartões abrem os detalhes nas próximas tarefas.
   const soon = () => {};
 
   if (settings) {
     return <Settings profile={profile} onSaved={onSaved} diet={diet} onBack={() => setSettings(false)} />;
   }
+
+  if (meas) {
+    return (
+      <MeasurementsView profile={profile} list={list} startAdding={meas === "add"} onBack={() => setMeas("")}
+        onChanged={() => { setMv((n) => n + 1); onSaved(); }} />
+    );
+  }
+
+  const last = list[list.length - 1];
+  const change = changeSince(list);
+  const lastWaist = [...list].reverse().find((m) => m.waist_cm != null)?.waist_cm ?? null;
+  const imc = bmi(last?.weight_kg ?? null, profile.height_cm);
+  const rce = waistHeight(lastWaist, profile.height_cm);
+  const f2 = (n: number) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const weeks = change ? Math.round(change.days / 7) : 0;
 
   const age = profile.birth_year ? new Date().getFullYear() - profile.birth_year : null;
   const bits = [
@@ -79,8 +101,26 @@ export default function Profile({ profile, ent, onSaved, onPro, diet, goal }: Pr
         </div>
       </header>
 
-      <Card label="Peso e medidas" action="+ medir" onOpen={soon}>
-        <p className="empty">Registre seu peso</p>
+      <Card label="Peso e medidas" action="+ medir" onOpen={() => setMeas("add")}>
+        {last ? (
+          <button className="pcard-body" onClick={() => setMeas("view")}>
+            <div className="pcard-split">
+              <div>
+                <span className="big">{f1(last.weight_kg)}</span> kg
+                {change && <small>{change.delta < 0 ? "−" : "+"}{f1(Math.abs(change.delta))} kg em {weeks} semanas</small>}
+              </div>
+              <div className="right">
+                {lastWaist != null && <div>cintura {f1(lastWaist)} cm</div>}
+                {(imc != null || rce != null) && (
+                  <small>{[imc != null && `IMC ${f1(imc)}`, rce != null && `RCE ${f2(rce)}`].filter(Boolean).join(" · ")}</small>
+                )}
+              </div>
+            </div>
+            {list.length > 1 && <LineChart compact unit="kg" color="var(--ink)" points={list.map((m) => ({ t: m.measured_at, v: m.weight_kg }))} />}
+          </button>
+        ) : (
+          <p className="empty">Registre seu peso</p>
+        )}
       </Card>
       <Card label="Composição corporal" action="+ enviar" locked={!canUse(ent, "body_comp")} onOpen={soon} onPro={onPro}>
         <p className="empty">Envie um laudo de bioimpedância</p>

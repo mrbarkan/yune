@@ -31,10 +31,9 @@ export default function Settings({ profile, onSaved, diet, onBack }: { profile: 
   const num = (v: string) => (v === "" ? null : Number(v.replace(",", ".")));
 
   async function saveProfile() {
-    // water_sizes é salvo pela folha de Água; o estado local pode estar desatualizado.
-    const { id, water_sizes: _, ...rest } = p;
+    // Só as metas: peso, foto, nome etc. são gravados em outras telas e a cópia local pode estar velha.
     try {
-      await updateDoc(profileDoc(id), rest);
+      await updateDoc(profileDoc(p.id), { kcal_goal: p.kcal_goal, water_goal_ml: p.water_goal_ml, sleep_goal_min: p.sleep_goal_min });
       setMsg("Salvo.");
       onSaved();
     } catch {
@@ -90,8 +89,7 @@ export default function Settings({ profile, onSaved, diet, onBack }: { profile: 
       <DietSection {...diet} profile={p} onGoals={async (goals) => {
         const next = { ...p, ...goals };
         setP(next);
-        const { id, water_sizes: _, ...rest } = next;
-        await updateDoc(profileDoc(id), rest).then(onSaved, () => setMsg("Confira os valores e tente de novo."));
+        await updateDoc(profileDoc(next.id), { kcal_goal: next.kcal_goal, water_goal_ml: next.water_goal_ml }).then(onSaved, () => setMsg("Confira os valores e tente de novo."));
       }} />
 
       <section className="group">
