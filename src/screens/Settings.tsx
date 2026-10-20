@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AboutSheet } from "@/sheets/AboutSheet";
+import { AccountSection } from "@/components/AccountSection";
 import { suggestedGoal } from "@/lib/activity";
 import { disablePush, disablePushQuietly, enablePush, isIOS, pushState, type PushState } from "@/lib/push";
 import { signOut } from "firebase/auth";
@@ -169,6 +170,7 @@ export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }:
       </section>
 
       <ExportSection profile={p} />
+      <AccountSection />
 
       <section className="group">
         <button className="btn ghost" disabled={leaving} onClick={async () => { setLeaving(true); try { await disablePushQuietly(); await signOut(auth); } finally { setLeaving(false); } }}>
