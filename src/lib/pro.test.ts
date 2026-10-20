@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isActive, proStatus, proStatusLine } from "./pro";
+import { isActive, proStatus, proStatusLine, stripeActive } from "./pro";
 import type { Entitlements } from "./firebase";
 
 const now = new Date("2026-10-19T12:00:00Z");
@@ -55,5 +55,19 @@ describe("proStatusLine", () => {
   it("past_due e none", () => {
     expect(proStatusLine({ status: "past_due", until: null }, tz)).toBe("Pagamento pendente — atualize o cartão");
     expect(proStatusLine({ status: "none", until: null }, tz)).toBeNull();
+  });
+});
+
+describe("stripeActive", () => {
+  it("só beta -> falso", () => expect(stripeActive(ent({ pro: true, source: "beta", beta_until: "2026-11-10T00:00:00Z" }), now)).toBe(false));
+  it("padrão FREE -> falso", () => expect(stripeActive(ent({}), now)).toBe(false));
+  it("stripe vigente -> verdadeiro", () => expect(stripeActive(ent({ pro: true, stripe: stripe({}) }), now)).toBe(true));
+  it("trialing e past_due contam", () => {
+    expect(stripeActive(ent({ stripe: stripe({ status: "trialing" }) }), now)).toBe(true);
+    expect(stripeActive(ent({ stripe: stripe({ status: "past_due" }) }), now)).toBe(true);
+  });
+  it("vencida ou cancelada -> falso", () => {
+    expect(stripeActive(ent({ stripe: stripe({ until: "2026-10-18T00:00:00Z" }) }), now)).toBe(false);
+    expect(stripeActive(ent({ stripe: stripe({ status: "canceled" }) }), now)).toBe(false);
   });
 });

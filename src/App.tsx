@@ -3,7 +3,7 @@ import { onIdTokenChanged, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { splitByDay, totals, useProfile, useRange } from "@/lib/data";
 import { useDietPlan } from "@/lib/diet";
-import { canUse, proStatus, useEntitlements } from "@/lib/pro";
+import { canUse, stripeActive, useEntitlements } from "@/lib/pro";
 import { parseProReturn, withoutProParam } from "@/lib/proReturn";
 import { startOfDay } from "@/lib/time";
 import Auth from "@/screens/Auth";
@@ -54,7 +54,7 @@ function Shell({ userId }: { userId: string }) {
   const dietAllowed = canUse(ent, "diet");
   // Volta do Checkout: ok = espera o servidor liberar; cancel = só limpa a URL.
   const [proReturn, setProReturn] = useState(() => parseProReturn(location.search));
-  const proLive = proStatus(ent).status !== "none";
+  const proLive = stripeActive(ent);
   useEffect(() => {
     if (proReturn === "cancel" || (proReturn === "ok" && proLive)) {
       history.replaceState(null, "", withoutProParam(location.href));

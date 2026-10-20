@@ -179,7 +179,7 @@ function ProSection({ ent, tz, onPro }: { ent: Entitlements; tz: string; onPro: 
       <h2 className="section-title">Yune Pro</h2>
       {PRO_OPEN && <p className="note">Durante o beta, o Pro está liberado para todos.</p>}
       {line && <p className={st.status === "past_due" ? "note err" : "note"}>{line}</p>}
-      {st.status === "none" && !PRO_OPEN && <button className="btn ghost" onClick={onPro}>Conhecer o Pro</button>}
+      {st.status === "none" && <button className="btn ghost" onClick={onPro}>Conhecer o Pro</button>}
       {ent.stripe && <button className="btn ghost" disabled={busy} onClick={manage}>{busy ? "Abrindo…" : "Gerenciar assinatura"}</button>}
       {err && <p className="note err">{err}</p>}
     </section>

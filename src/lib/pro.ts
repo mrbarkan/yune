@@ -36,6 +36,12 @@ export function proStatus(ent: Entitlements, now = new Date()): { status: ProSta
   return { status: "none", until: null };
 }
 
+/** Assinatura da Stripe valendo (o beta não conta). Sem snapshot ainda (FREE) = falso. */
+export function stripeActive(ent: Entitlements, now = new Date()) {
+  const s = ent.stripe;
+  return !!s && ["trialing", "active", "past_due"].includes(s.status) && s.until > now.toISOString();
+}
+
 /** entitlements/{uid}: escrito só pelo servidor (cobrança, cupom, beta). Ao vivo, para refletir a assinatura na hora. */
 export function useEntitlements(userId: string) {
   const [ent, setEnt] = useState<Entitlements>(FREE);
