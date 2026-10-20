@@ -1,30 +1,51 @@
-import { useEffect, useState } from "react";
-import { Segmented } from "@/components/Sheet";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AboutSheet } from "@/sheets/AboutSheet";
 import { suggestedGoal } from "@/lib/activity";
-import { disablePush, enablePush, isIOS, pushState, type PushState } from "@/lib/push";
+import { disablePush, disablePushQuietly, enablePush, isIOS, pushState, type PushState } from "@/lib/push";
 import { signOut } from "firebase/auth";
-import { getDoc, setDoc, updateDoc } from "firebase/firestore";
-import { auth, DEFAULT_REMINDERS, profileDoc, remindersDoc, type Profile, type Reminders } from "@/lib/firebase";
-import { fmtNum } from "@/lib/time";
+import { deleteDoc, getDoc, getDocs, setDoc, updateDoc } from "firebase/firestore";
+import { deleteObject, ref, uploadBytes } from "firebase/storage";
+import { deleteHealthFile } from "@/lib/bodycomp";
+import { compressImage } from "@/lib/image";
+import {
+  auth, createPortal, DEFAULT_REMINDERS, importDietPlan, profileDoc, remindersDoc, row, rows, storage, table, type DietPlan, type Entitlements, type Profile, type Reminders,
+} from "@/lib/firebase";
+import { fmtLiters, fmtNum } from "@/lib/time";
+import { goalsValid } from "@/lib/profileDefaults";
+import { PRO_OPEN, proStatus, proStatusLine } from "@/lib/pro";
 
-export default function Settings({ profile, onSaved }: { profile: Profile; onSaved: () => void }) {
+type DietProps = { allowed: boolean; plan: DietPlan | null; onOpen: () => void; onChanged: () => void };
+
+export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }: {
+  profile: Profile; ent: Entitlements; onPro: () => void; onSaved: () => void; diet: DietProps; onBack: () => void;
+}) {
   const [p, setP] = useState(profile);
   const [r, setR] = useState<Reminders | null>(null);
   const [push, setPush] = useState<PushState>("off");
   const [msg, setMsg] = useState("");
+  const [remErr, setRemErr] = useState("");
+  const [leaving, setLeaving] = useState(false);
+  const [about, setAbout] = useState(false);
+  const closeAbout = useCallback(() => setAbout(false), []);
   const suggestion = suggestedGoal(p);
 
   useEffect(() => {
-    getDoc(remindersDoc(profile.id)).then((snap) => setR({ ...DEFAULT_REMINDERS, ...snap.data(), user_id: profile.id }));
+    getDoc(remindersDoc(profile.id)).then((snap) => setR({ ...DEFAULT_REMINDERS, ...snap.data(), user_id: profile.id }))
+      .catch(() => setRemErr("Não foi possível carregar os lembretes."));
     pushState().then(setPush).catch(() => setPush("unsupported"));
   }, [profile.id]);
 
   const num = (v: string) => (v === "" ? null : Number(v.replace(",", ".")));
 
   async function saveProfile() {
-    const { id, ...rest } = p;
+    if (!goalsValid(p as unknown as Record<string, unknown>)) {
+      setMsg("Informe metas maiores que zero.");
+      setP({ ...p, kcal_goal: profile.kcal_goal, water_goal_ml: profile.water_goal_ml, sleep_goal_min: profile.sleep_goal_min });
+      return;
+    }
+    // Só as metas: peso, foto, nome etc. são gravados em outras telas e a cópia local pode estar velha.
     try {
-      await updateDoc(profileDoc(id), rest);
+      await updateDoc(profileDoc(p.id), { kcal_goal: p.kcal_goal, water_goal_ml: p.water_goal_ml, sleep_goal_min: p.sleep_goal_min });
       setMsg("Salvo.");
       onSaved();
     } catch {
@@ -33,10 +54,17 @@ export default function Settings({ profile, onSaved }: { profile: Profile; onSav
   }
 
   async function saveReminders(next: Reminders) {
+    const prev = r;
     setR(next);
     // Só as preferências: os campos last_* são do servidor (send-reminders).
     const prefs = Object.fromEntries(Object.keys(DEFAULT_REMINDERS).map((k) => [k, next[k as keyof Reminders]]));
-    await setDoc(remindersDoc(next.user_id), prefs, { merge: true });
+    try {
+      await setDoc(remindersDoc(next.user_id), prefs, { merge: true });
+      setRemErr("");
+    } catch {
+      setR(prev);
+      setRemErr("Não foi possível salvar o lembrete.");
+    }
   }
 
   async function togglePush() {
@@ -53,25 +81,10 @@ export default function Settings({ profile, onSaved }: { profile: Profile; onSav
   return (
     <main className="screen settings">
       <header className="screen-head">
+        <button className="link back" onClick={onBack}>‹ Perfil</button>
         <p className="eyebrow">{p.name || "Você"}</p>
         <h1 className="day-title">Ajustes</h1>
       </header>
-
-      <section className="group">
-        <h2 className="section-title">Corpo</h2>
-        <label className="field"><span>Nome</span>
-          <input value={p.name ?? ""} onChange={(e) => setP({ ...p, name: e.target.value })} /></label>
-        <Segmented value={(p.sex ?? "") as "f" | "m" | ""} onChange={(v) => setP({ ...p, sex: (v || null) as Profile["sex"] })}
-          options={[{ value: "f", label: "Feminino" }, { value: "m", label: "Masculino" }]} />
-        <div className="row three">
-          <label className="field"><span>Peso (kg)</span>
-            <input inputMode="decimal" value={p.weight_kg ?? ""} onChange={(e) => setP({ ...p, weight_kg: num(e.target.value) })} /></label>
-          <label className="field"><span>Altura (cm)</span>
-            <input inputMode="numeric" value={p.height_cm ?? ""} onChange={(e) => setP({ ...p, height_cm: num(e.target.value) })} /></label>
-          <label className="field"><span>Nascimento</span>
-            <input inputMode="numeric" placeholder="ano" value={p.birth_year ?? ""} onChange={(e) => setP({ ...p, birth_year: num(e.target.value) })} /></label>
-        </div>
-      </section>
 
       <section className="group">
         <h2 className="section-title">Metas</h2>
@@ -91,6 +104,14 @@ export default function Settings({ profile, onSaved }: { profile: Profile; onSav
         <button className="btn primary" onClick={saveProfile}>Salvar</button>
         {msg && <p className="note">{msg}</p>}
       </section>
+
+      <ProSection ent={ent} tz={p.timezone} onPro={onPro} />
+
+      <DietSection {...diet} profile={p} onGoals={async (goals) => {
+        const next = { ...p, ...goals };
+        setP(next);
+        await updateDoc(profileDoc(next.id), { kcal_goal: next.kcal_goal, water_goal_ml: next.water_goal_ml }).then(onSaved, () => setMsg("Confira os valores e tente de novo."));
+      }} />
 
       <section className="group">
         <h2 className="section-title">Notificações</h2>
@@ -112,6 +133,7 @@ export default function Settings({ profile, onSaved }: { profile: Profile; onSav
           <Toggle label="Receber notificações neste aparelho" on={push === "on"} onChange={togglePush} />
         )}
 
+        {remErr && <p className="note err">{remErr}</p>}
         {r && (
           <div className="reminders">
             <Toggle label="Lembrar de beber água" on={r.water_enabled} onChange={(v) => saveReminders({ ...r, water_enabled: v })} />
@@ -141,11 +163,254 @@ export default function Settings({ profile, onSaved }: { profile: Profile; onSav
         )}
       </section>
 
+      <ExportSection profile={p} />
+
       <section className="group">
-        <button className="btn ghost" onClick={() => signOut(auth)}>Sair</button>
+        <button className="btn ghost" disabled={leaving} onClick={async () => { setLeaving(true); try { await disablePushQuietly(); await signOut(auth); } finally { setLeaving(false); } }}>
+          {leaving ? "Saindo…" : "Sair"}
+        </button>
+        <button className="link" onClick={() => setAbout(true)}>Sobre o Yune</button>
         <p className="colophon">Yune · estimativas de calorias são aproximadas e não substituem orientação profissional.</p>
       </section>
+      {about && <AboutSheet onClose={closeAbout} />}
     </main>
+  );
+}
+
+function ProSection({ ent, tz, onPro }: { ent: Entitlements; tz: string; onPro: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const st = proStatus(ent);
+  const line = proStatusLine(st, tz);
+
+  async function manage() {
+    setBusy(true);
+    setErr("");
+    const r = await createPortal();
+    if (r.url) {
+      location.href = r.url;
+      return;
+    }
+    setErr(r.error || "Não foi possível abrir a assinatura agora.");
+    setBusy(false);
+  }
+
+  return (
+    <section className="group">
+      <h2 className="section-title">Yune Pro</h2>
+      {PRO_OPEN && <p className="note">Durante o beta, o Pro está liberado para todos.</p>}
+      {line && <p className={st.status === "past_due" ? "note err" : "note"}>{line}</p>}
+      {(st.status === "none" || st.status === "beta") && <button className="btn ghost" onClick={onPro}>Conhecer o Pro</button>}
+      {ent.stripe && <button className="btn ghost" disabled={busy} onClick={manage}>{busy ? "Abrindo…" : "Gerenciar assinatura"}</button>}
+      {err && <p className="note err">{err}</p>}
+    </section>
+  );
+}
+
+function ExportSection({ profile }: { profile: Profile }) {
+  const [busy, setBusy] = useState<"xlsx" | "pdf" | null>(null);
+  const [err, setErr] = useState("");
+
+  async function run(kind: "xlsx" | "pdf") {
+    setBusy(kind);
+    setErr("");
+    try {
+      // Carregado só aqui: o código de exportação fica fora do pacote principal.
+      const { downloadPdf, downloadXlsx, exportFileName, exportTables, loadExportData } = await import("@/lib/export");
+      const data = await loadExportData();
+      const tables = exportTables(data, profile.timezone);
+      const name = exportFileName(new Date(), profile.timezone);
+      if (kind === "xlsx") await downloadXlsx(tables, name);
+      else await downloadPdf(tables, data.profile, name);
+    } catch (e) {
+      console.error("export", e);
+      setErr("Não foi possível exportar agora. Tente de novo.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section className="group">
+      <h2 className="section-title">Seus dados</h2>
+      <p className="note">Baixe tudo o que você registrou. As fotos do corpo não entram: elas ficam só no app.</p>
+      <div className="row">
+        <button className="btn ghost" disabled={!!busy} onClick={() => run("xlsx")}>{busy === "xlsx" ? "Gerando…" : "Planilha (Excel)"}</button>
+        <button className="btn ghost" disabled={!!busy} onClick={() => run("pdf")}>{busy === "pdf" ? "Gerando…" : "PDF"}</button>
+      </div>
+      {err && <p className="note err">{err}</p>}
+    </section>
+  );
+}
+
+const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, Math.round(v)));
+
+/** Arquivo escolhido → tipo aceito pelas regras do Storage (o iPhone às vezes não informa o tipo). */
+function fileType(f: File) {
+  const ext = f.name.toLowerCase().split(".").pop() ?? "";
+  if (f.type === "application/pdf" || ext === "pdf") return { type: "application/pdf", ext: "pdf" };
+  if (f.type === DOCX || ext === "docx") return { type: DOCX, ext: "docx" };
+  if (f.type.startsWith("text/") || ext === "txt") return { type: "text/plain", ext: "txt" };
+  if (f.type.startsWith("image/") || /^(jpe?g|png|webp|heic|heif)$/.test(ext)) return { type: "image/jpeg", ext: "jpg" };
+  return null;
+}
+
+function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: DietProps & {
+  profile: Profile;
+  onGoals: (g: Pick<Profile, "kcal_goal" | "water_goal_ml">) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [paste, setPaste] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+
+  if (!allowed && !plan) {
+    return (
+      <section className="group">
+        <h2 className="section-title">Dieta <span className="pro-badge">Pro</span></h2>
+        <p className="note">Envie a dieta do seu nutricionista ou médico: o Yune ajusta as metas, mostra as opções de cada refeição e avisa quando algo foge do combinado.</p>
+      </section>
+    );
+  }
+
+  async function run(body: Parameters<typeof importDietPlan>[0], uploaded?: string) {
+    const res = await importDietPlan(body);
+    if (res.error) {
+      if (uploaded) await deleteObject(ref(storage, uploaded)).catch(() => {});
+      setMsg({ kind: "err", text: res.error });
+      return;
+    }
+    setPaste(null);
+    setMsg({ kind: "ok", text: "Dieta pronta." });
+    onChanged();
+  }
+
+  async function onFile(f?: File) {
+    if (!f) return;
+    setMsg(null);
+    if (/\.doc$/i.test(f.name)) return setMsg({ kind: "err", text: "Arquivo .doc antigo: salve como PDF ou .docx e envie de novo." });
+    const kind = fileType(f);
+    if (!kind) return setMsg({ kind: "err", text: "Use PDF, Word (.docx), texto ou foto." });
+    setBusy(true);
+    try {
+      // Foto: reduz mantendo o texto legível.
+      const blob = kind.ext === "jpg" ? (await compressImage(f, 2400, 0.9)).blob : f;
+      if (blob.size > 10 * 1024 * 1024) throw new Error("Arquivo grande demais (máx. 10 MB).");
+      const path = `diet-plans/${profile.id}/${crypto.randomUUID()}.${kind.ext}`;
+      await uploadBytes(ref(storage, path), blob, { contentType: kind.type });
+      await run({ path, name: f.name }, path);
+    } catch (e) {
+      setMsg({ kind: "err", text: (e as Error).message || "Não foi possível enviar." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function fromText() {
+    setBusy(true);
+    setMsg(null);
+    await run({ text: paste ?? "" });
+    setBusy(false);
+  }
+
+  async function remove() {
+    try {
+      for (const x of rows<DietPlan>(await getDocs(table("diet_plans")))) {
+        if (x.file_path) await deleteHealthFile(x.file_path);
+        await deleteDoc(row("diet_plans", x.id));
+      }
+      setConfirm(false);
+      setMsg(null);
+      onChanged();
+    } catch {
+      setMsg({ kind: "err", text: "Não foi possível apagar a dieta. Tente de novo." });
+    }
+  }
+
+  const t = plan?.targets;
+  const goals = allowed && t && {
+    kcal_goal: t.kcal != null ? clamp(t.kcal, 800, 6000) : profile.kcal_goal,
+    water_goal_ml: t.water_ml != null ? clamp(t.water_ml, 250, 8000) : profile.water_goal_ml,
+  };
+  const goalsDiffer = goals && (goals.kcal_goal !== profile.kcal_goal || goals.water_goal_ml !== profile.water_goal_ml);
+
+  // Sem Pro o plano continua aqui, só para ler (apagar é dado da pessoa).
+  if (!allowed) {
+    return (
+      <section className="group">
+        <h2 className="section-title">Dieta <span className="pro-badge">Pro</span></h2>
+        <button className="diet-card" onClick={onOpen}>
+          <b>{plan!.title}</b>
+          <small>{[plan!.prescriber, plan!.file_name].filter(Boolean).join(" · ") || "Ver dieta"}</small>
+        </button>
+        <p className="note">Seu plano continua aqui. Para enviar uma nova dieta, assine o Pro.</p>
+        {confirm ? (
+          <div className="row">
+            <p className="note">Apaga também as dietas anteriores guardadas.</p>
+            <button className="btn ghost" onClick={() => setConfirm(false)}>Manter</button>
+            <button className="btn danger" onClick={remove}>Apagar dieta</button>
+          </div>
+        ) : (
+          <button className="link" onClick={() => setConfirm(true)}>Remover dieta</button>
+        )}
+        {msg && <p className={`note ${msg.kind}`}>{msg.text}</p>}
+      </section>
+    );
+  }
+
+  return (
+    <section className="group">
+      <h2 className="section-title">Dieta <span className="pro-badge">Pro</span></h2>
+      <input ref={input} type="file" hidden accept=".pdf,.docx,.txt,application/pdf,text/plain,image/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
+
+      {plan ? (
+        <>
+          <button className="diet-card" onClick={onOpen}>
+            <b>{plan.title}</b>
+            <small>{[plan.prescriber, plan.file_name].filter(Boolean).join(" · ") || "Ver dieta"}</small>
+          </button>
+          {goals && goalsDiffer && (
+            <button className="btn ghost" disabled={busy} onClick={() => onGoals(goals)}>
+              Usar metas da dieta: {fmtNum(goals.kcal_goal)} kcal · {fmtLiters(goals.water_goal_ml)} L
+            </button>
+          )}
+        </>
+      ) : (
+        <p className="note">Envie a dieta que você recebeu (PDF, Word, texto ou foto). O Yune organiza as refeições, ajusta as metas e avisa quando algo foge do combinado.</p>
+      )}
+
+      {busy ? (
+        <p className="thinking"><span className="pulse">Lendo a dieta… pode levar um minuto</span></p>
+      ) : paste !== null ? (
+        <>
+          <label className="field"><span>Texto da dieta</span>
+            <textarea rows={8} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Cole aqui a dieta como recebeu" /></label>
+          <div className="row">
+            <button className="btn ghost" onClick={() => setPaste(null)}>Cancelar</button>
+            <button className="btn primary" disabled={paste.trim().length < 20} onClick={fromText}>Ler dieta</button>
+          </div>
+        </>
+      ) : (
+        <div className="row">
+          <button className="btn ghost" onClick={() => input.current?.click()}>{plan ? "Trocar arquivo" : "Enviar arquivo"}</button>
+          <button className="btn ghost" onClick={() => setPaste("")}>Colar texto</button>
+        </div>
+      )}
+
+      {plan && !busy && (confirm ? (
+        <div className="row">
+          <p className="note">Apaga também as dietas anteriores guardadas.</p>
+          <button className="btn ghost" onClick={() => setConfirm(false)}>Manter</button>
+          <button className="btn danger" onClick={remove}>Apagar dieta</button>
+        </div>
+      ) : (
+        <button className="link" onClick={() => setConfirm(true)}>Remover dieta</button>
+      ))}
+      {msg && <p className={`note ${msg.kind}`}>{msg.text}</p>}
+    </section>
   );
 }
 

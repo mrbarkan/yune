@@ -1,24 +1,38 @@
 {
   "name": "yune",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "TZ=America/Sao_Paulo vitest run src",
+    "test:all": "npm test && npm --prefix functions test",
+    "check": "tsc --noEmit && npm --prefix functions run typecheck && npm run test:all",
+    "test:rules": "firebase emulators:exec --only firestore,storage --project demo-yune 'vitest run tests/rules --no-file-parallelism'",
+    "emulators": "npm --prefix functions run build && firebase emulators:start --project demo-yune",
+    "seed:emu": "FIRESTORE_EMULATOR_HOST=127.0.0.1:8085 FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099 FIREBASE_STORAGE_EMULATOR_HOST=127.0.0.1:9199 npm --prefix functions run seed",
+    "dev:emu": "vite --host --mode emulator"
   },
   "dependencies": {
     "firebase": "^12.19.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "write-excel-file": "^4.1.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "@types/node": "^22.20.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "firebase-tools": "^15.34.0",
     "typescript": "^7.0.2",
-    "vite": "^8.3.4"
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
   }
 }

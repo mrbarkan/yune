@@ -1,0 +1,23 @@
+[
+  { "code": "glicemia", "name": "Glicemia de jejum", "unit": "mg/dL", "chart": true, "conversions": { "mmol/L": 18.016 } },
+  { "code": "insulina", "name": "Insulina", "unit": "µUI/mL", "chart": true, "conversions": { "mUI/L": 1, "pmol/L": 0.1667 } },
+  { "code": "hba1c", "name": "Hemoglobina glicada", "unit": "%", "chart": true, "conversions": {} },
+  { "code": "colesterol_total", "name": "Colesterol total", "unit": "mg/dL", "chart": true, "conversions": { "mmol/L": 38.67 } },
+  { "code": "hdl", "name": "HDL", "unit": "mg/dL", "chart": true, "conversions": { "mmol/L": 38.67 } },
+  { "code": "ldl", "name": "LDL", "unit": "mg/dL", "chart": true, "conversions": { "mmol/L": 38.67 } },
+  { "code": "triglicerides", "name": "Triglicérides", "unit": "mg/dL", "chart": true, "conversions": { "mmol/L": 88.57 } },
+  { "code": "tsh", "name": "TSH", "unit": "µUI/mL", "chart": true, "conversions": { "mUI/L": 1 } },
+  { "code": "t4_livre", "name": "T4 livre", "unit": "ng/dL", "chart": true, "conversions": { "pmol/L": 0.0777 } },
+  { "code": "vitamina_d", "name": "Vitamina D (25-OH)", "unit": "ng/mL", "chart": true, "conversions": { "nmol/L": 0.4 } },
+  { "code": "b12", "name": "Vitamina B12", "unit": "pg/mL", "chart": true, "conversions": { "pmol/L": 1.355 } },
+  { "code": "ferritina", "name": "Ferritina", "unit": "ng/mL", "chart": true, "conversions": { "µg/L": 1 } },
+  { "code": "ferro", "name": "Ferro sérico", "unit": "µg/dL", "chart": true, "conversions": { "µmol/L": 5.585 } },
+  { "code": "pcr_us", "name": "PCR ultrassensível", "unit": "mg/L", "chart": true, "conversions": { "mg/dL": 10 } },
+  { "code": "tgo", "name": "TGO (AST)", "unit": "U/L", "chart": true, "conversions": { "UI/L": 1 } },
+  { "code": "tgp", "name": "TGP (ALT)", "unit": "U/L", "chart": true, "conversions": { "UI/L": 1 } },
+  { "code": "ggt", "name": "GGT", "unit": "U/L", "chart": true, "conversions": { "UI/L": 1 } },
+  { "code": "creatinina", "name": "Creatinina", "unit": "mg/dL", "chart": true, "conversions": { "µmol/L": 0.01131 } },
+  { "code": "ureia", "name": "Ureia", "unit": "mg/dL", "chart": true, "conversions": { "mmol/L": 6.006 } },
+  { "code": "acido_urico", "name": "Ácido úrico", "unit": "mg/dL", "chart": true, "conversions": { "µmol/L": 0.0168 } },
+  { "code": "hemoglobina", "name": "Hemoglobina", "unit": "g/dL", "chart": true, "conversions": { "g/L": 0.1 } }
+]

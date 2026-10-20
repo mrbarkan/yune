@@ -1,8 +1,8 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { collection, doc, getFirestore, type QuerySnapshot } from "firebase/firestore";
-import { getFunctions, httpsCallable } from "firebase/functions";
-import { getStorage } from "firebase/storage";
+import { connectAuthEmulator, getAuth } from "firebase/auth";
+import { collection, connectFirestoreEmulator, doc, getFirestore, type QuerySnapshot } from "firebase/firestore";
+import { connectFunctionsEmulator, getFunctions, httpsCallable } from "firebase/functions";
+import { connectStorageEmulator, getStorage } from "firebase/storage";
 
 const app = initializeApp({
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string,
@@ -17,8 +17,17 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 const functions = getFunctions(app, import.meta.env.VITE_FIREBASE_REGION || "southamerica-east1");
 
+// Com VITE_USE_EMULATORS=1 (.env.emulator) tudo aponta para os emuladores locais.
+if (import.meta.env.VITE_USE_EMULATORS === "1") {
+  connectAuthEmulator(auth, "http://127.0.0.1:9099");
+  connectFirestoreEmulator(db, "127.0.0.1", 8085);
+  connectStorageEmulator(storage, "127.0.0.1", 9199);
+  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+}
+
 /** Registros de cada pessoa ficam em users/{uid}/{coleção}. */
-export type Table = "meals" | "activities" | "water" | "sleep" | "custom_foods" | "push_subscriptions";
+export type Table = "meals" | "activities" | "water" | "sleep" | "custom_foods" | "push_subscriptions" | "diet_plans"
+  | "measurements" | "body_comp" | "lab_reports" | "body_photos" | "anamnesis";
 
 const uid = () => {
   const u = auth.currentUser;
@@ -30,6 +39,7 @@ export const table = (name: Table) => collection(db, "users", uid(), name);
 export const row = (name: Table, id: string) => doc(db, "users", uid(), name, id);
 export const profileDoc = (id: string) => doc(db, "users", id);
 export const remindersDoc = (id: string) => doc(db, "reminders", id);
+export const entitlementsDoc = (id: string) => doc(db, "entitlements", id);
 
 export const rows = <T,>(snap: QuerySnapshot) => snap.docs.map((d) => ({ ...d.data(), id: d.id }) as T);
 
@@ -43,15 +53,19 @@ export async function estimateFood<T>(body: unknown): Promise<T & { error?: stri
   }
 }
 
-export const DEFAULT_PROFILE: Omit<Profile, "id" | "name" | "timezone"> = {
-  sex: null, birth_year: null, height_cm: null, weight_kg: null,
-  kcal_goal: 2000, water_goal_ml: 2000, sleep_goal_min: 480,
-};
+/** Lê a dieta enviada (arquivo no Storage ou texto colado). Pode levar até um minuto. */
+export async function importDietPlan(body: { path: string; name: string } | { text: string }): Promise<{ id?: string; error?: string }> {
+  try {
+    const res = await httpsCallable(functions, "importDietPlan", { timeout: 300_000 })(body);
+    return res.data as { id?: string; error?: string };
+  } catch {
+    return { error: "Não foi possível ler a dieta agora." };
+  }
+}
 
-export const DEFAULT_REMINDERS: Omit<Reminders, "user_id"> = {
-  water_enabled: true, water_every_min: 120, water_start: "09:00", water_end: "21:00",
-  summary_enabled: true, summary_time: "21:30", bedtime_enabled: false, bedtime_time: "23:00",
-};
+export const DEFAULT_WATER_SIZES = [150, 250, 350, 500];
+
+export { DEFAULT_PROFILE, DEFAULT_REMINDERS } from "./defaults";
 
 export type Profile = {
   id: string;
@@ -64,7 +78,69 @@ export type Profile = {
   water_goal_ml: number;
   sleep_goal_min: number;
   timezone: string;
+  /** Tamanhos dos botões de água (ml); ausente = DEFAULT_WATER_SIZES. */
+  water_sizes?: number[];
+  /** Caminho da foto de perfil no Storage. */
+  photo_path?: string | null;
 };
+
+export type Measurement = {
+  id: string; measured_at: string; weight_kg: number;
+  waist_cm: number | null; hip_cm: number | null; neck_cm: number | null;
+  source: "manual" | "body_comp"; created_at?: string;
+};
+
+export type BodyCompValues = {
+  weight_kg: number | null; fat_pct: number | null; fat_kg: number | null; muscle_kg: number | null;
+  lean_kg: number | null; visceral: number | null; bmr_kcal: number | null; water_l: number | null;
+  ecw_tbw: number | null; phase_angle: number | null;
+};
+
+export type BodyComp = BodyCompValues & {
+  id: string; measured_at: string; device: string; file_path: string | null; ai: boolean; created_at: string;
+};
+
+export type LabResult = {
+  code: string; name: string; value: number | null; value_text: string; unit: string;
+  ref_low: number | null; ref_high: number | null; ref_text: string;
+};
+
+export type LabReport = {
+  id: string; collected_at: string; lab: string | null; results: LabResult[];
+  file_paths: string[]; ai: boolean; created_at: string;
+};
+
+type HealthMode = "body_comp" | "labs";
+export type BodyCompDraft = Omit<BodyComp, "id" | "file_path" | "ai" | "created_at">;
+export type LabsDraft = Omit<LabReport, "id" | "file_paths" | "ai" | "created_at">;
+
+/** Lê o laudo enviado (foto ou PDF) e devolve um rascunho para a pessoa conferir. */
+export async function readHealthDoc<T extends BodyCompDraft | LabsDraft>(
+  body: { mode: HealthMode; paths: string[] },
+): Promise<{ draft?: T; error?: string }> {
+  try {
+    const res = await httpsCallable(functions, "readHealthDoc", { timeout: 120_000 })(body);
+    return res.data as { draft?: T; error?: string };
+  } catch {
+    return { error: "Não foi possível ler o documento agora." };
+  }
+}
+
+/** Grava os valores confirmados (cria, ou atualiza se vier `id`). Só o servidor escreve nessas coleções. */
+export async function saveHealthDoc(
+  body: { mode: HealthMode; id?: string; data: BodyCompDraft | LabsDraft; paths: string[]; ai: boolean },
+): Promise<{ id?: string; error?: string }> {
+  try {
+    const res = await httpsCallable(functions, "saveHealthDoc")(body);
+    return res.data as { id?: string; error?: string };
+  } catch {
+    return { error: "Não foi possível salvar agora." };
+  }
+}
+
+export type Pose = "frente" | "lado" | "costas";
+
+export type BodyPhoto = { id: string; taken_at: string; pose: Pose; path: string; created_at?: string };
 
 export type FoodItem = { name: string; quantity: string; grams: number; kcal: number; protein_g: number; carbs_g: number; fat_g: number };
 
@@ -119,4 +195,76 @@ export type Reminders = {
   summary_time: string;
   bedtime_enabled: boolean;
   bedtime_time: string;
+};
+
+export type StripeState = { status: string; until: string; cancel_at_period_end: boolean; trial_end: string | null };
+export type Entitlements = {
+  pro: boolean;
+  until: string | null;
+  source?: "stripe" | "beta" | null;
+  beta_until?: string | null;
+  stripe?: StripeState | null;
+};
+
+/** Valor em centavos, como vem da Stripe; o app formata. */
+export type ProPrice = { amount: number; currency: string };
+/** `trial`: "7d" = 7 dias grátis; "beta" = o teste vai até o fim do beta; "none" = cobra já. */
+export type ProPrices = { monthly: ProPrice; annual: ProPrice; trial: "7d" | "beta" | "none" };
+
+/** Abre o Checkout da Stripe para assinar o Pro. */
+export async function createCheckout(plan: "monthly" | "annual"): Promise<{ url?: string; error?: string }> {
+  try {
+    const res = await httpsCallable(functions, "createCheckout")({ plan });
+    return res.data as { url?: string; error?: string };
+  } catch {
+    return { error: "Não foi possível abrir o pagamento agora." };
+  }
+}
+
+/** Portal do cliente da Stripe (trocar cartão, cancelar). */
+export async function createPortal(): Promise<{ url?: string; error?: string }> {
+  try {
+    const res = await httpsCallable(functions, "createPortal")();
+    return res.data as { url?: string; error?: string };
+  } catch {
+    return { error: "Não foi possível abrir a assinatura agora." };
+  }
+}
+
+export async function getProPrices(): Promise<ProPrices | { error: string }> {
+  try {
+    const res = await httpsCallable(functions, "getProPrices")();
+    return res.data as ProPrices | { error: string };
+  } catch {
+    return { error: "Não foi possível carregar os preços agora." };
+  }
+}
+
+export type DietRule = {
+  kind: "avoid" | "limit" | "prefer";
+  name: string;
+  detail: string;
+  max_per_day: number | null;
+  unit: "g" | "ml" | "vezes" | null;
+  keywords: string[];
+};
+
+export type DietMeal = { name: string; time: string | null; notes: string; options: { label: string; items: FoodItem[] }[] };
+
+/** Dieta prescrita, organizada pela função importDietPlan. Só uma fica ativa. */
+export type DietPlan = {
+  id: string;
+  title: string;
+  prescriber: string | null;
+  issued_on: string | null;
+  summary: string;
+  targets: { kcal: number | null; protein_g: number | null; carbs_g: number | null; fat_g: number | null; fiber_g: number | null; water_ml: number | null };
+  meals: DietMeal[];
+  rules: DietRule[];
+  guidelines: string[];
+  notes: string;
+  active: boolean;
+  file_path: string | null;
+  file_name: string | null;
+  created_at: string;
 };

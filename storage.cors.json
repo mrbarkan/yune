@@ -1,0 +1,7 @@
+[
+  {
+    "origin": ["http://localhost:8080", "https://yune-13758.web.app", "https://yune-13758.firebaseapp.com"],
+    "method": ["GET"],
+    "maxAgeSeconds": 3600
+  }
+]

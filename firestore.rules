@@ -14,8 +14,9 @@ service cloud.firestore {
     function text(v, lo, hi) { return v is string && v.size() >= lo && v.size() <= hi; }
     function hhmm(v) { return v is string && v.matches('^([01]\\d|2[0-3]):[0-5]\\d(:00)?$'); }
 
-    function validProfile() {
-      return d().keys().hasOnly(['name', 'sex', 'birth_year', 'height_cm', 'weight_kg', 'kcal_goal', 'water_goal_ml', 'sleep_goal_min', 'timezone'])
+    function validProfile(uid) {
+      return d().keys().hasOnly(['name', 'sex', 'birth_year', 'height_cm', 'weight_kg', 'kcal_goal', 'water_goal_ml', 'sleep_goal_min', 'timezone',
+          'water_sizes', 'photo_path'])
         && (d().get('name', null) == null || text(d().name, 0, 80))
         && d().get('sex', null) in [null, 'f', 'm']
         && optNum(d().get('birth_year', null), 1900, 2100)
@@ -24,7 +25,16 @@ service cloud.firestore {
         && num(d().kcal_goal, 800, 6000)
         && num(d().water_goal_ml, 250, 8000)
         && num(d().sleep_goal_min, 180, 720)
-        && text(d().timezone, 1, 64);
+        && text(d().timezone, 1, 64)
+        && (d().get('water_sizes', null) == null || validWaterSizes(d().water_sizes))
+        && (d().get('photo_path', null) == null || d().photo_path.matches('^profile-photos/' + uid + '/[^/]+$'));
+    }
+
+    // Os quatro botões de água da folha Água (ml).
+    function validWaterSizes(v) {
+      return v is list && v.size() == 4
+        && v[0] is int && num(v[0], 10, 3000) && v[1] is int && num(v[1], 10, 3000)
+        && v[2] is int && num(v[2], 10, 3000) && v[3] is int && num(v[3], 10, 3000);
     }
 
     function validReminders() {
@@ -35,11 +45,22 @@ service cloud.firestore {
         && hhmm(d().water_start) && hhmm(d().water_end) && hhmm(d().summary_time) && hhmm(d().bedtime_time);
     }
 
+    // Campos last_* são do servidor (sendReminders): a pessoa não os altera. Ausentes é aceito de propósito:
+    // useProfile pode regravar DEFAULT_REMINDERS por cima; no pior caso repete um lembrete.
+    function keptOrAbsent(k) { return !d().keys().hasAny([k]) || (resource != null && d()[k] == resource.data.get(k, null)); }
+
+    function validMeasurement() {
+      return d().keys().hasOnly(['measured_at', 'weight_kg', 'waist_cm', 'hip_cm', 'neck_cm', 'source', 'created_at'])
+        && iso(d().measured_at) && iso(d().created_at) && num(d().weight_kg, 20, 400)
+        && optNum(d().get('waist_cm', null), 30, 250) && optNum(d().get('hip_cm', null), 30, 250) && optNum(d().get('neck_cm', null), 20, 80)
+        && d().source in ['manual', 'body_comp'];
+    }
+
     function validItems(v) { return v == null || (v is list && v.size() <= 60); }
 
     match /users/{uid} {
       allow read: if owner(uid);
-      allow create, update: if owner(uid) && validProfile();
+      allow create, update: if owner(uid) && validProfile(uid);
 
       match /meals/{id} {
         allow read, delete: if owner(uid);
@@ -83,20 +104,75 @@ service cloud.firestore {
           && d().keys().hasOnly(['name', 'brand', 'serving_label', 'serving_g', 'kcal', 'protein_g', 'carbs_g', 'fat_g', 'created_at'])
           && text(d().name, 1, 120) && (d().get('brand', null) == null || text(d().brand, 0, 80)) && text(d().serving_label, 1, 80)
           && d().serving_g is number && d().serving_g > 0 && d().serving_g <= 2000
-          && num(d().kcal, 0, 5000) && num(d().protein_g, 0, 2000) && num(d().carbs_g, 0, 2000) && num(d().fat_g, 0, 2000);
+          && num(d().kcal, 0, 5000) && num(d().protein_g, 0, 2000) && num(d().carbs_g, 0, 2000) && num(d().fat_g, 0, 2000)
+          && iso(d().created_at);
+      }
+
+      // Dieta prescrita: quem cria é a função importDietPlan; o app só lê, liga/desliga e apaga.
+      match /diet_plans/{id} {
+        allow read, delete: if owner(uid);
+        allow update: if owner(uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active'])
+          && request.resource.data.active is bool;
+      }
+
+      // Medidas: o app cria e edita (created_at fixo). Fotos de evolução: só cria e apaga.
+      match /measurements/{id} {
+        allow read, delete: if owner(uid);
+        allow create: if owner(uid) && validMeasurement();
+        allow update: if owner(uid) && validMeasurement() && d().created_at == resource.data.created_at;
+      }
+
+      match /body_photos/{id} {
+        allow read, delete: if owner(uid);
+        allow create: if owner(uid)
+          && d().keys().hasOnly(['taken_at', 'pose', 'path', 'created_at'])
+          && iso(d().taken_at) && iso(d().created_at) && d().pose in ['frente', 'lado', 'costas']
+          && d().path is string && d().path.matches('^body-photos/' + uid + '/[^/]+$');
+      }
+
+      // Questionário de saúde: um documento por data (AAAA-MM-DD).
+      match /anamnesis/{day} {
+        allow read, delete: if owner(uid);
+        allow create, update: if owner(uid) && day.matches('^\\d{4}-\\d{2}-\\d{2}$')
+          && d().keys().hasOnly(['updated_at', 'answers'])
+          && iso(d().updated_at) && d().answers is map
+          // Chaves = SECTIONS em src/lib/anamnesis.ts (tests/rules/data.test.ts confere).
+          && d().answers.keys().hasOnly(['objetivo', 'condicoes', 'medicamentos', 'suplementos', 'alergias', 'intestino', 'rotina', 'ciclo', 'peso', 'alimentacao']);
+      }
+
+      // Composição corporal e exames: quem grava é a função que lê o documento; o app só lê e apaga.
+      match /body_comp/{id} {
+        allow read, delete: if owner(uid);
+      }
+      match /lab_reports/{id} {
+        allow read, delete: if owner(uid);
       }
 
       match /push_subscriptions/{id} {
         allow read, delete: if owner(uid);
         allow create, update: if owner(uid)
           && d().keys().hasOnly(['endpoint', 'p256dh', 'auth', 'user_agent', 'created_at'])
-          && text(d().endpoint, 1, 1000) && text(d().p256dh, 1, 200) && text(d().auth, 1, 100);
+          && text(d().endpoint, 1, 1000)
+          && d().endpoint.matches('^https://(fcm[.]googleapis[.]com|updates[.]push[.]services[.]mozilla[.]com|web[.]push[.]apple[.]com|[a-z0-9.-]+[.]notify[.]windows[.]com)/.+$')
+          && text(d().p256dh, 1, 200) && text(d().auth, 1, 100)
+          && text(d().get('user_agent', ''), 0, 512) && iso(d().created_at) && id.size() == 64;
       }
     }
 
     match /reminders/{uid} {
       allow read: if owner(uid);
-      allow create, update: if owner(uid) && validReminders();
+      allow create, update: if owner(uid) && validReminders()
+        && keptOrAbsent('last_water_at') && keptOrAbsent('last_summary_date') && keptOrAbsent('last_bedtime_date');
+    }
+
+    // Pro: { pro, until, source }. Só o servidor concede; a pessoa só lê o próprio.
+    match /entitlements/{uid} {
+      allow read: if owner(uid);
+    }
+
+    // Cobrança (Stripe): sem acesso do cliente, só as Cloud Functions.
+    match /billing/{uid} {
+      allow read, write: if false;
     }
 
     // ai_usage e qualquer outra coleção: só as Cloud Functions (Admin SDK) acessam.

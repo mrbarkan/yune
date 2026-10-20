@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getDoc, getDocs, orderBy, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { auth, DEFAULT_PROFILE, DEFAULT_REMINDERS, profileDoc, remindersDoc, rows, table, type Activity, type Meal, type Profile, type Sleep, type Water } from "./firebase";
+import { withGoalDefaults } from "./profileDefaults";
+import { isDenied, retryDenied } from "./retry";
 import { addDays, startOfDay } from "./time";
 
 export type DayData = { meals: Meal[]; activities: Activity[]; water: Water[]; sleep: Sleep[] };
@@ -26,6 +28,13 @@ export async function loadRange(from: Date, to: Date): Promise<DayData> {
     water: rows<Water>(water),
     sleep: [...rows<Sleep>(woke), ...rows<Sleep>(asleep)].sort((a, b) => a.bed_at.localeCompare(b.bed_at)),
   };
+}
+
+/** Total de água de hoje (ml) com uma única consulta. */
+export async function todayWaterMl(now = new Date()): Promise<number> {
+  const from = startOfDay(now);
+  const snap = await getDocs(query(table("water"), where("drank_at", ">=", from.toISOString()), where("drank_at", "<", addDays(from, 1).toISOString()), orderBy("drank_at")));
+  return rows<Water>(snap).reduce((s, w) => s + w.ml, 0);
 }
 
 export function splitByDay(data: DayData, day: Date): DayData {
@@ -64,14 +73,20 @@ export function useRange(from: Date, days: number, version: number) {
   const [data, setData] = useState<DayData>(EMPTY);
   const [loading, setLoading] = useState(true);
   const key = startOfDay(from).getTime();
+  const loaded = useRef("");
   useEffect(() => {
     let alive = true;
-    setLoading(true);
+    const id = `${key}:${days}`;
+    // Só mostra "carregando" ao trocar de período; ao atualizar, os dados continuam na tela.
+    if (loaded.current !== id) setLoading(true);
     loadRange(new Date(key), addDays(new Date(key), days)).then((d) => {
       if (alive) {
+        loaded.current = id;
         setData(d);
         setLoading(false);
       }
+    }, () => {
+      if (alive) setLoading(false);
     });
     return () => {
       alive = false;
@@ -82,7 +97,8 @@ export function useRange(from: Date, days: number, version: number) {
 
 export function useProfile(userId: string | undefined) {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const reload = useCallback(async () => {
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
     if (!userId) return;
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo";
     const ref = profileDoc(userId);
@@ -95,16 +111,29 @@ export function useProfile(userId: string | undefined) {
       await setDoc(ref, data);
       await setDoc(remindersDoc(userId), DEFAULT_REMINDERS);
     } else {
-      p = { ...(snap.data() as Omit<Profile, "id">), id: userId };
+      p = withGoalDefaults({ ...(snap.data() as Omit<Profile, "id">), id: userId });
       if (p.timezone !== tz) {
         await updateDoc(ref, { timezone: tz });
         p.timezone = tz;
       }
     }
     setProfile(p);
+    setError(null);
   }, [userId]);
+  // Logo após "Já confirmei" o Firestore pode ainda estar com o token sem email_verified: renova e tenta de novo.
+  const reload = useCallback(async () => {
+    try {
+      await retryDenied(load, () => auth.currentUser?.getIdToken(true) ?? Promise.resolve());
+    } catch (err) {
+      // Depois da primeira carga o perfil já está na tela: uma falha de reload fica só no console e em `error`, que a tela não mostra enquanto há perfil.
+      console.error(err);
+      setError(isDenied(err)
+        ? "Não conseguimos confirmar seu acesso. Saia e entre de novo."
+        : "Não foi possível carregar seu perfil. Verifique a conexão e tente de novo.");
+    }
+  }, [load]);
   useEffect(() => {
     reload();
   }, [reload]);
-  return { profile, reload };
+  return { profile, reload, error };
 }

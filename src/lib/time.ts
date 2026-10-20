@@ -30,3 +30,12 @@ export const toLocalInput = (d: Date) => {
   return new Date(d.getTime() - off).toISOString().slice(0, 16);
 };
 export const fromLocalInput = (v: string) => new Date(v).toISOString();
+
+/** dd/mm no fuso da pessoa; fora do ano corrente (nesse fuso) vira dd/mm/aaaa. */
+export function fmtDayMonth(iso: string, tz: string, now: Date = new Date()) {
+  const d = new Date(iso);
+  const year = (x: Date) => x.toLocaleDateString("en-CA", { year: "numeric", timeZone: tz });
+  const opts: Intl.DateTimeFormatOptions = { day: "2-digit", month: "2-digit", timeZone: tz };
+  if (year(d) !== year(now)) opts.year = "numeric";
+  return d.toLocaleDateString("pt-BR", opts);
+}
