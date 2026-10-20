@@ -7,7 +7,7 @@ import { defineSecret } from "firebase-functions/params";
 import { onCall } from "firebase-functions/v2/https";
 import { AI_CONSENT_ERROR, checkAiConsent } from "./consent.js";
 import { clipPlan } from "./dietClip.js";
-import { replaceDiets } from "./dietReplace.js";
+import { activation, replaceDiets } from "./dietReplace.js";
 import { fileContent } from "./files.js";
 import { isPro } from "./pro.js";
 import { REGION } from "./region.js";
@@ -195,29 +195,38 @@ export const importDietPlan = onCall(
     // A dieta nova substitui as anteriores (documento e arquivo): ver dietReplace.ts.
     const db = getFirestore();
     const col = db.collection(`users/${uid}/diet_plans`);
-    const id = await replaceDiets(
-      {
-        list: async () => (await col.get()).docs.map((d) => ({
-          id: d.id, file_path: (d.get("file_path") as string | null) ?? null, created_at: (d.get("created_at") as string | null) ?? null,
-        })),
-        createActive: (data) => db.runTransaction(async (tx) => {
-          const active = await tx.get(col.where("active", "==", true));
-          const ref = col.doc();
-          active.docs.forEach((d) => tx.update(d.ref, { active: false }));
-          tx.set(ref, data);
-          return ref.id;
-        }),
-        remove: async (docId) => void (await col.doc(docId).delete()),
-        deactivate: async (docId) => void (await col.doc(docId).update({ active: false })),
-        deleteFile: async (p) => void (await getStorage().bucket().file(p).delete({ ignoreNotFound: true })),
-      },
-      {
-        ...rest,
-        file_path: path,
-        file_name: path ? fileName : null,
-        created_at: new Date().toISOString(),
-      },
-    );
+    let id: string;
+    try {
+      id = await replaceDiets(
+        {
+          list: async () => (await col.get()).docs.map((d) => ({
+            id: d.id, file_path: (d.get("file_path") as string | null) ?? null, created_at: (d.get("created_at") as string | null) ?? null,
+          })),
+          newId: () => col.doc().id,
+          save: (docId, data) => db.runTransaction(async (tx) => {
+            const active = await tx.get(col.where("active", "==", true));
+            const plan = activation(
+              { id: docId, created_at: data.created_at as string },
+              active.docs.map((d) => ({ id: d.id, created_at: (d.get("created_at") as string | null) ?? null })),
+            );
+            plan.deactivate.forEach((x) => tx.update(col.doc(x), { active: false }));
+            tx.set(col.doc(docId), { ...data, active: plan.active });
+          }),
+          remove: async (docId) => void (await col.doc(docId).delete()),
+          deactivate: async (docId) => void (await col.doc(docId).update({ active: false })),
+          deleteFile: async (p) => void (await getStorage().bucket().file(p).delete({ ignoreNotFound: true })),
+        },
+        {
+          ...rest,
+          file_path: path,
+          file_name: path ? fileName : null,
+          created_at: new Date().toISOString(),
+        },
+      );
+    } catch (err) {
+      console.error("importDietPlan: salvar", err instanceof Error ? err.name : "erro");
+      return { error: "Falha ao salvar a dieta. Tente de novo." };
+    }
     return { id };
   },
 );

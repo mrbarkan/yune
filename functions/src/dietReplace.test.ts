@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { replaceDiets } from "./dietReplace.js";
+import { activation, replaceDiets } from "./dietReplace.js";
 
 const AT = "2026-10-20T12:00:00.000Z";
 type Old = { id: string; file_path: string | null; created_at?: string | null };
@@ -9,11 +9,12 @@ function deps(old: Old[]) {
     ...old.map((o) => ({ created_at: "2026-10-01T00:00:00.000Z", ...o })),
     { id: "new", file_path: "diet-plans/u/a.pdf", created_at: AT },
   ]);
-  const createActive = vi.fn(async (_data: Record<string, unknown>) => "new");
+  const newId = vi.fn(() => "new");
+  const save = vi.fn(async (_id: string, _data: Record<string, unknown>) => {});
   const remove = vi.fn(async (_id: string) => {});
   const deactivate = vi.fn(async (_id: string) => {});
   const deleteFile = vi.fn(async (_p: string) => {});
-  return { list, createActive, remove, deactivate, deleteFile };
+  return { list, newId, save, remove, deactivate, deleteFile };
 }
 
 describe("replaceDiets", () => {
@@ -21,7 +22,7 @@ describe("replaceDiets", () => {
     const d = deps([{ id: "a", file_path: "diet-plans/u/old.pdf" }, { id: "b", file_path: null }]);
     const id = await replaceDiets(d, { title: "x", created_at: AT });
     expect(id).toBe("new");
-    expect(d.createActive).toHaveBeenCalledWith({ title: "x", created_at: AT, active: true });
+    expect(d.save).toHaveBeenCalledWith("new", { title: "x", created_at: AT });
     expect(d.deleteFile).toHaveBeenCalledTimes(1);
     expect(d.deleteFile).toHaveBeenCalledWith("diet-plans/u/old.pdf");
     expect(d.remove.mock.calls.map((c) => c[0])).toEqual(["a", "b"]);
@@ -82,6 +83,26 @@ describe("replaceDiets", () => {
   it("sem created_at nos dados, grava a hora atual", async () => {
     const d = deps([]);
     await replaceDiets(d, { title: "x" });
-    expect(typeof d.createActive.mock.calls[0][0].created_at).toBe("string");
+    expect(typeof d.save.mock.calls[0][1].created_at).toBe("string");
+  });
+});
+
+describe("activation", () => {
+  const k = (id: string, created_at: string | null) => ({ id, created_at });
+  it("sem ativas: a nova fica ativa", () => {
+    expect(activation(k("n", AT), [])).toEqual({ deactivate: [], active: true });
+  });
+  it("desativa só as ativas mais antigas", () => {
+    expect(activation(k("n", AT), [k("a", "2026-10-01T00:00:00.000Z"), k("b", null)])).toEqual({ deactivate: ["a", "b"], active: true });
+  });
+  it("commit fora de ordem: uma ativa mais nova já existe, a nova entra inativa e não a desativa", () => {
+    expect(activation(k("a", AT), [k("b", "2026-10-20T12:00:01.000Z")])).toEqual({ deactivate: [], active: false });
+  });
+  it("nova tentativa da mesma transação ignora o próprio documento", () => {
+    expect(activation(k("n", AT), [k("n", AT)])).toEqual({ deactivate: [], active: true });
+  });
+  it("mesmo instante: o id maior ganha", () => {
+    expect(activation(k("b", AT), [k("a", AT)])).toEqual({ deactivate: ["a"], active: true });
+    expect(activation(k("a", AT), [k("b", AT)])).toEqual({ deactivate: [], active: false });
   });
 });
