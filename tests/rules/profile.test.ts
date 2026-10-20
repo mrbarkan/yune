@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
-import { afterAll, beforeAll, describe, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 import { deleteDoc, doc, getDoc, setDoc, setLogLevel } from "firebase/firestore";
 
 let env: RulesTestEnvironment;
@@ -9,11 +9,15 @@ const NOW = "2026-10-19T12:00:00.000Z";
 
 beforeAll(async () => {
   env = await initializeTestEnvironment({
-    projectId: "demo-yune",
+    projectId: "demo-yune-profile",
     firestore: { rules: readFileSync("firestore.rules", "utf8"), host: "127.0.0.1", port: 8085 },
   });
 });
 afterAll(() => env.cleanup());
+beforeEach(() => env.clearFirestore());
+
+const seed = (path: string, data: object) =>
+  env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), path), data));
 
 const alice = () => env.authenticatedContext("alice", { email_verified: true }).firestore();
 const bob = () => env.authenticatedContext("bob", { email_verified: true }).firestore();
@@ -49,10 +53,12 @@ describe("regras: measurements", () => {
     await assertSucceeds(setDoc(doc(alice(), "users/alice/measurements/m3"), min));
   });
   it("edição mantém created_at", async () => {
+    await seed("users/alice/measurements/m1", measurement());
     await assertSucceeds(setDoc(doc(alice(), "users/alice/measurements/m1"), measurement({ weight_kg: 70 })));
     await assertFails(setDoc(doc(alice(), "users/alice/measurements/m1"), measurement({ created_at: "2026-10-20T12:00:00.000Z" })));
   });
   it("outra pessoa não lê nem escreve", async () => {
+    await seed("users/alice/measurements/m1", measurement());
     await assertFails(getDoc(doc(bob(), "users/alice/measurements/m1")));
     await assertFails(setDoc(doc(bob(), "users/alice/measurements/m9"), measurement()));
     await assertSucceeds(getDoc(doc(alice(), "users/alice/measurements/m1")));
@@ -69,6 +75,7 @@ describe("regras: body_photos", () => {
     await assertFails(setDoc(doc(alice(), "users/alice/body_photos/p2"), bodyPhoto({ extra: 1 })));
   });
   it("não edita; lê e apaga só a dona", async () => {
+    await seed("users/alice/body_photos/p1", bodyPhoto());
     await assertFails(setDoc(doc(alice(), "users/alice/body_photos/p1"), bodyPhoto({ pose: "lado" })));
     await assertFails(getDoc(doc(bob(), "users/alice/body_photos/p1")));
     await assertFails(deleteDoc(doc(bob(), "users/alice/body_photos/p1")));
@@ -79,7 +86,7 @@ describe("regras: body_photos", () => {
 
 describe("regras: anamnesis", () => {
   it("id de data e answers em mapa", async () => {
-    await assertSucceeds(setDoc(doc(alice(), "users/alice/anamnesis/2026-10-19"), { updated_at: NOW, answers: { fuma: false, meds: ["a"] } }));
+    await assertSucceeds(setDoc(doc(alice(), "users/alice/anamnesis/2026-10-19"), { updated_at: NOW, answers: { objetivo: { principal: "Comer melhor" }, medicamentos: { lista: "a" } } }));
     await assertFails(setDoc(doc(alice(), "users/alice/anamnesis/hoje"), { updated_at: NOW, answers: {} }));
     await assertFails(setDoc(doc(alice(), "users/alice/anamnesis/2026-10-20"), { updated_at: NOW, answers: "x" }));
     await assertFails(setDoc(doc(alice(), "users/alice/anamnesis/2026-10-20"), { updated_at: NOW, answers: {}, extra: 1 }));
@@ -92,9 +99,7 @@ describe("regras: anamnesis", () => {
 describe("regras: body_comp e lab_reports (só servidor escreve)", () => {
   for (const col of ["body_comp", "lab_reports"]) {
     it(`${col}: cliente não cria nem edita; lê e apaga`, async () => {
-      await env.withSecurityRulesDisabled(async (ctx) => {
-        await setDoc(doc(ctx.firestore(), `users/alice/${col}/s1`), { measured_at: NOW });
-      });
+      await seed(`users/alice/${col}/s1`, { measured_at: NOW });
       await assertFails(setDoc(doc(alice(), `users/alice/${col}/n1`), { measured_at: NOW }));
       await assertFails(setDoc(doc(alice(), `users/alice/${col}/s1`), { measured_at: NOW, x: 1 }));
       await assertFails(getDoc(doc(bob(), `users/alice/${col}/s1`)));
@@ -106,9 +111,7 @@ describe("regras: body_comp e lab_reports (só servidor escreve)", () => {
 
 describe("regras: billing e entitlements", () => {
   it("billing sem acesso do cliente; entitlements só leitura", async () => {
-    await env.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), "billing/alice"), { customer: "c" });
-    });
+    await seed("billing/alice", { customer: "c" });
     await assertFails(getDoc(doc(alice(), "billing/alice")));
     await assertFails(setDoc(doc(alice(), "billing/alice"), { customer: "x" }));
     await assertFails(setDoc(doc(alice(), "entitlements/alice"), { pro: true }));

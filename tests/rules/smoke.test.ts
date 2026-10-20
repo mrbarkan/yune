@@ -6,7 +6,7 @@ import { doc, getDoc } from "firebase/firestore";
 let env: RulesTestEnvironment;
 
 beforeAll(async () => {
-  env = await initializeTestEnvironment({ projectId: "demo-yune", firestore: { rules: readFileSync("firestore.rules", "utf8") } });
+  env = await initializeTestEnvironment({ projectId: "demo-yune-smoke", firestore: { rules: readFileSync("firestore.rules", "utf8") } });
 });
 afterAll(() => env.cleanup());
 

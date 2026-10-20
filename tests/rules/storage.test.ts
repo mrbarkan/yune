@@ -1,23 +1,34 @@
 import { readFileSync } from "node:fs";
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
-import { afterAll, beforeAll, describe, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
 import { deleteObject, getBytes, ref, uploadBytes } from "firebase/storage";
 
 let env: RulesTestEnvironment;
 
 beforeAll(async () => {
   env = await initializeTestEnvironment({
-    projectId: "demo-yune",
+    projectId: "demo-yune-storage",
     storage: { rules: readFileSync("storage.rules", "utf8"), host: "127.0.0.1", port: 9199 },
   });
 });
 afterAll(() => env.cleanup());
+beforeEach(() => env.clearStorage());
+
+const seedFile = (path: string, bytes = 16, contentType = "image/jpeg") =>
+  env.withSecurityRulesDisabled(async (ctx) => {
+    await uploadBytes(ref(ctx.storage(), path), new Uint8Array(bytes), { contentType });
+  });
 
 const alice = () => env.authenticatedContext("alice", { email_verified: true }).storage();
 const bob = () => env.authenticatedContext("bob", { email_verified: true }).storage();
 const unverified = () => env.authenticatedContext("alice", { email_verified: false }).storage();
-const put = (s: ReturnType<typeof alice>, path: string, bytes: number, contentType: string) =>
+const putExact = (s: ReturnType<typeof alice>, path: string, bytes: number, contentType: string) =>
   uploadBytes(ref(s, path), new Uint8Array(bytes), { contentType });
+// clearStorage não esvazia o emulador de forma confiável, e a regra agora recusa sobrescrever;
+// então cada envio usa um nome novo (prefixo contado) e os testes não dependem da ordem.
+let seq = 0;
+const put = (s: ReturnType<typeof alice>, path: string, bytes: number, contentType: string) =>
+  putExact(s, path.replace(/([^/]+)$/, `${++seq}-$1`), bytes, contentType);
 
 describe("regras: storage", () => {
   it("imagem de 1 KB nas três pastas", async () => {
@@ -36,9 +47,19 @@ describe("regras: storage", () => {
     await assertFails(put(alice(), "health-docs/alice/huge.pdf", 11 * 1024 * 1024, "application/pdf"));
   });
   it("outra pessoa não lê nem envia", async () => {
+    await seedFile("body-photos/alice/a.jpg");
     await assertFails(getBytes(ref(bob(), "body-photos/alice/a.jpg")));
     await assertFails(put(bob(), "body-photos/alice/b.jpg", 1024, "image/jpeg"));
     await assertSucceeds(getBytes(ref(alice(), "body-photos/alice/a.jpg")));
+  });
+
+  it("não sobrescreve um arquivo existente", async () => {
+    await assertSucceeds(putExact(alice(), "health-docs/alice/dup.pdf", 1024, "application/pdf"));
+    await assertFails(putExact(alice(), "health-docs/alice/dup.pdf", 1024, "image/png"));
+  });
+  it("diet-plans recusa svg e html", async () => {
+    await assertFails(put(alice(), "diet-plans/alice/a.svg", 1024, "image/svg+xml"));
+    await assertFails(put(alice(), "diet-plans/alice/a.html", 1024, "text/html"));
   });
 
   describe("e-mail não verificado", () => {
@@ -55,7 +76,7 @@ describe("regras: storage", () => {
     });
     it("verificado envia, lê e apaga nas cinco pastas", async () => {
       for (const f of FOLDERS) {
-        await assertSucceeds(put(alice(), `${f}/alice/v.jpg`, 1024, "image/jpeg"));
+        await assertSucceeds(putExact(alice(), `${f}/alice/v.jpg`, 1024, "image/jpeg"));
         await assertSucceeds(getBytes(ref(alice(), `${f}/alice/v.jpg`)));
         await assertSucceeds(deleteObject(ref(alice(), `${f}/alice/v.jpg`)));
       }
