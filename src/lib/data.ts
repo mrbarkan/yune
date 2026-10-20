@@ -125,7 +125,7 @@ export function useProfile(userId: string | undefined) {
     try {
       await retryDenied(load, () => auth.currentUser?.getIdToken(true) ?? Promise.resolve());
     } catch (err) {
-      // Depois da primeira carga o perfil já está na tela: falhas de reload (ex.: ao salvar) só vão para o console.
+      // Depois da primeira carga o perfil já está na tela: uma falha de reload fica só no console e em `error`, que a tela não mostra enquanto há perfil.
       console.error(err);
       setError(isDenied(err)
         ? "Não conseguimos confirmar seu acesso. Saia e entre de novo."

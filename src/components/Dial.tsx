@@ -1,4 +1,5 @@
 import type { DayData } from "@/lib/data";
+import { goalFraction } from "@/lib/profileDefaults";
 import { hourOf, sameDay } from "@/lib/time";
 
 /**
@@ -40,7 +41,7 @@ export function Dial({ day, data, kcalGoal, size = SIZE, minimal = false, childr
   const isToday = sameDay(day, now);
   const nowH = hourOf(now, day);
   const kcalIn = data.meals.reduce((s, m) => s + m.kcal, 0);
-  const goalFrac = Math.min(kcalIn / Math.max(kcalGoal || 0, 1), 1) || 0;
+  const goalFrac = goalFraction(kcalIn, kcalGoal);
   const over = kcalIn > kcalGoal;
 
   return (

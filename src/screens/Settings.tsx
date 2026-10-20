@@ -11,6 +11,7 @@ import {
   auth, createPortal, DEFAULT_REMINDERS, importDietPlan, profileDoc, remindersDoc, row, rows, storage, table, type DietPlan, type Entitlements, type Profile, type Reminders,
 } from "@/lib/firebase";
 import { fmtLiters, fmtNum } from "@/lib/time";
+import { goalsValid } from "@/lib/profileDefaults";
 import { PRO_OPEN, proStatus, proStatusLine } from "@/lib/pro";
 
 type DietProps = { allowed: boolean; plan: DietPlan | null; onOpen: () => void; onChanged: () => void };
@@ -37,6 +38,11 @@ export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }:
   const num = (v: string) => (v === "" ? null : Number(v.replace(",", ".")));
 
   async function saveProfile() {
+    if (!goalsValid(p as unknown as Record<string, unknown>)) {
+      setMsg("Informe metas maiores que zero.");
+      setP({ ...p, kcal_goal: profile.kcal_goal, water_goal_ml: profile.water_goal_ml, sleep_goal_min: profile.sleep_goal_min });
+      return;
+    }
     // Só as metas: peso, foto, nome etc. são gravados em outras telas e a cópia local pode estar velha.
     try {
       await updateDoc(profileDoc(p.id), { kcal_goal: p.kcal_goal, water_goal_ml: p.water_goal_ml, sleep_goal_min: p.sleep_goal_min });

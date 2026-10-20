@@ -11,3 +11,13 @@ export function withGoalDefaults<T extends Record<string, unknown>>(p: T): T {
   }
   return out as T;
 }
+
+/** Metas só valem se forem números positivos. */
+export const goalsValid = (p: Record<string, unknown>) =>
+  GOALS.every((k) => typeof p[k] === "number" && Number.isFinite(p[k]) && (p[k] as number) > 0);
+
+/** Fração da meta calórica já consumida (0–1); meta ausente, zero ou NaN dá 0. */
+export function goalFraction(kcalIn: number, goal: number | null | undefined) {
+  const f = kcalIn / Math.max(goal || 0, 1);
+  return Number.isFinite(f) ? Math.min(Math.max(f, 0), 1) : 0;
+}
