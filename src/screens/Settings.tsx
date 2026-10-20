@@ -146,6 +146,8 @@ export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }:
         )}
       </section>
 
+      <ExportSection profile={p} />
+
       <section className="group">
         <button className="btn ghost" onClick={() => signOut(auth)}>Sair</button>
         <button className="link" onClick={() => setAbout(true)}>Sobre o Yune</button>
@@ -181,6 +183,41 @@ function ProSection({ ent, tz, onPro }: { ent: Entitlements; tz: string; onPro: 
       {line && <p className={st.status === "past_due" ? "note err" : "note"}>{line}</p>}
       {st.status === "none" && <button className="btn ghost" onClick={onPro}>Conhecer o Pro</button>}
       {ent.stripe && <button className="btn ghost" disabled={busy} onClick={manage}>{busy ? "Abrindo…" : "Gerenciar assinatura"}</button>}
+      {err && <p className="note err">{err}</p>}
+    </section>
+  );
+}
+
+function ExportSection({ profile }: { profile: Profile }) {
+  const [busy, setBusy] = useState<"xlsx" | "pdf" | null>(null);
+  const [err, setErr] = useState("");
+
+  async function run(kind: "xlsx" | "pdf") {
+    setBusy(kind);
+    setErr("");
+    try {
+      // Carregado só aqui: o código de exportação fica fora do pacote principal.
+      const { downloadPdf, downloadXlsx, exportFileName, exportTables, loadExportData } = await import("@/lib/export");
+      const data = await loadExportData();
+      const tables = exportTables(data, profile.timezone);
+      const name = exportFileName(new Date(), profile.timezone);
+      if (kind === "xlsx") await downloadXlsx(tables, name);
+      else await downloadPdf(tables, data.profile, name);
+    } catch {
+      setErr("Não foi possível exportar agora. Tente de novo.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section className="group">
+      <h2 className="section-title">Seus dados</h2>
+      <p className="note">Baixe tudo o que você registrou. As fotos do corpo não entram: elas ficam só no app.</p>
+      <div className="row">
+        <button className="btn ghost" disabled={!!busy} onClick={() => run("xlsx")}>{busy === "xlsx" ? "Gerando…" : "Planilha (Excel)"}</button>
+        <button className="btn ghost" disabled={!!busy} onClick={() => run("pdf")}>{busy === "pdf" ? "Gerando…" : "PDF"}</button>
+      </div>
       {err && <p className="note err">{err}</p>}
     </section>
   );
