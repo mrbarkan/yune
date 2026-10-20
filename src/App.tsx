@@ -8,15 +8,17 @@ import { startOfDay } from "@/lib/time";
 import Auth from "@/screens/Auth";
 import Today, { type EditTarget } from "@/screens/Today";
 import Week from "@/screens/Week";
-import Settings from "@/screens/Settings";
+import Profile from "@/screens/Profile";
+import { PrivateImage } from "@/components/PrivateImage";
+import { Sheet } from "@/components/Sheet";
 import { FoodSheet } from "@/sheets/FoodSheet";
 import { MoveSheet } from "@/sheets/MoveSheet";
 import { WaterSheet } from "@/sheets/WaterSheet";
 import { SleepSheet } from "@/sheets/SleepSheet";
 import { DietSheet } from "@/sheets/DietSheet";
 
-type Tab = "today" | "week" | "settings";
-type SheetKind = "menu" | "food" | "move" | "water" | "sleep" | "diet" | null;
+type Tab = "today" | "week" | "profile";
+type SheetKind = "menu" | "food" | "move" | "water" | "sleep" | "diet" | "pro" | null;
 
 export default function App() {
   // Envolto num objeto: depois de confirmar o e-mail o Firebase devolve o mesmo User, só com token novo.
@@ -66,8 +68,8 @@ function Shell({ userId }: { userId: string }) {
       {tab === "today" && <Today profile={profile} version={version} onChange={bump} plan={plan} dietOn={dietAllowed} onOpenDiet={() => setSheet("diet")}
         onEdit={setEdit} />}
       {tab === "week" && <Week profile={profile} version={version} />}
-      {tab === "settings" && (
-        <Settings profile={profile} onSaved={() => { reload(); bump(); }}
+      {tab === "profile" && (
+        <Profile profile={profile} ent={ent} version={version} onSaved={() => { reload(); bump(); }} onPro={() => setSheet("pro")}
           diet={{ allowed: dietAllowed, plan, onOpen: () => setSheet("diet"), onChanged: bump }} />
       )}
 
@@ -77,8 +79,10 @@ function Shell({ userId }: { userId: string }) {
           <span className={sheet === "menu" ? "plus open" : "plus"} />
         </button>
         <button className={tab === "week" ? "on" : ""} onClick={() => setTab("week")}>Semana</button>
-        <button className={tab === "settings" ? "on gear" : "gear"} onClick={() => setTab("settings")} aria-label="Ajustes">
-          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden><circle cx="12" cy="12" r="3.2" /><circle cx="12" cy="12" r="8.5" strokeDasharray="2.6 2.1" /></svg>
+        <button className={tab === "profile" ? "on avatar-tab" : "avatar-tab"} onClick={() => setTab("profile")} aria-label="Perfil">
+          <span className="avatar mini" aria-hidden>
+            {profile.photo_path ? <PrivateImage path={profile.photo_path} alt="" /> : <span>{(profile.name || "?").trim().charAt(0).toUpperCase()}</span>}
+          </span>
         </button>
       </nav>
 
@@ -108,6 +112,7 @@ function Shell({ userId }: { userId: string }) {
       {edit?.kind === "move" && <MoveSheet profile={profile} activity={edit.rec} onClose={close} onSaved={saved} />}
       {edit?.kind === "water" && <WaterSheet profile={profile} todayMl={todayMl} water={edit.rec} onClose={close} onSaved={saved} onProfile={reload} />}
       {edit?.kind === "sleep" && <SleepSheet sleep={edit.rec} onClose={close} onSaved={saved} />}
+      {sheet === "pro" && <Sheet title="Yune Pro" onClose={close}><p className="note">Em breve: exames, composição corporal e dieta prescrita.</p></Sheet>}
       {sheet === "diet" && plan && <DietSheet plan={plan} onClose={close} />}
     </div>
   );

@@ -335,8 +335,8 @@ input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; bo
 }
 .tabbar > button { height: 48px; border-radius: 99px; font-size: 14px; color: var(--ink-3); transition: color 0.2s; }
 .tabbar > button.on { color: var(--ink); font-weight: 600; }
-.tabbar .gear { display: grid; place-items: center; }
-.tabbar .gear svg { fill: none; stroke: currentColor; stroke-width: 1.5; }
+.tabbar .avatar-tab { display: grid; place-items: center; }
+.tabbar .avatar-tab.on .avatar { outline: 2px solid var(--ink); outline-offset: 2px; }
 .fab { width: 56px; height: 56px !important; border-radius: 50% !important; background: var(--ink); justify-self: center; display: grid; place-items: center; transition: transform 0.2s var(--ease); }
 .fab:active { transform: scale(0.93); }
 .plus { position: relative; width: 20px; height: 20px; transition: transform 0.35s var(--ease); }
@@ -417,3 +417,22 @@ input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; bo
 .diet-rules li b { font-weight: 500; }
 .diet-rules li span { color: var(--ink-2); font-size: 13px; }
 .diet-rules.avoid .eyebrow { color: var(--food); }
+
+/* ---------- perfil ---------- */
+.private-img { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.avatar { position: relative; width: 58px; height: 58px; border-radius: 50%; overflow: hidden; flex: none; display: grid; place-items: center; background: var(--paper-2); border: 1px solid var(--line); color: var(--ink-2); font: 400 26px/1 var(--serif); }
+.avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.avatar.mini { width: 30px; height: 30px; font-size: 16px; }
+.avatar.big { width: 96px; height: 96px; font-size: 40px; }
+.profile-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px; }
+.profile-top .eyebrow { margin: 0; }
+.profile-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.profile-name { font: 400 30px/1.05 var(--serif); letter-spacing: -0.01em; margin: 0 0 4px; }
+.pcard { background: var(--paper-2); border-radius: 18px; padding: 14px 16px; margin-top: 10px; display: grid; gap: 10px; align-content: start; }
+.pcard header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.pcard .section-title { margin: 0; }
+.pcard .empty { font-size: 18px; }
+.pcard-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pcard-pair .pcard { margin-top: 10px; }
+.screen-head .back { display: block; margin-bottom: 14px; }
+.edit-photo { display: grid; justify-items: center; gap: 12px; margin-bottom: 8px; }

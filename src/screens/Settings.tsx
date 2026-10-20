@@ -14,7 +14,7 @@ import { fmtLiters, fmtNum } from "@/lib/time";
 
 type DietProps = { allowed: boolean; plan: DietPlan | null; onOpen: () => void; onChanged: () => void };
 
-export default function Settings({ profile, onSaved, diet }: { profile: Profile; onSaved: () => void; diet: DietProps }) {
+export default function Settings({ profile, onSaved, diet, onBack }: { profile: Profile; onSaved: () => void; diet: DietProps; onBack: () => void }) {
   const [p, setP] = useState(profile);
   const [r, setR] = useState<Reminders | null>(null);
   const [push, setPush] = useState<PushState>("off");
@@ -63,25 +63,10 @@ export default function Settings({ profile, onSaved, diet }: { profile: Profile;
   return (
     <main className="screen settings">
       <header className="screen-head">
+        <button className="link back" onClick={onBack}>‹ Perfil</button>
         <p className="eyebrow">{p.name || "Você"}</p>
         <h1 className="day-title">Ajustes</h1>
       </header>
-
-      <section className="group">
-        <h2 className="section-title">Corpo</h2>
-        <label className="field"><span>Nome</span>
-          <input value={p.name ?? ""} onChange={(e) => setP({ ...p, name: e.target.value })} /></label>
-        <Segmented value={(p.sex ?? "") as "f" | "m" | ""} onChange={(v) => setP({ ...p, sex: (v || null) as Profile["sex"] })}
-          options={[{ value: "f", label: "Feminino" }, { value: "m", label: "Masculino" }]} />
-        <div className="row three">
-          <label className="field"><span>Peso (kg)</span>
-            <input inputMode="decimal" value={p.weight_kg ?? ""} onChange={(e) => setP({ ...p, weight_kg: num(e.target.value) })} /></label>
-          <label className="field"><span>Altura (cm)</span>
-            <input inputMode="numeric" value={p.height_cm ?? ""} onChange={(e) => setP({ ...p, height_cm: num(e.target.value) })} /></label>
-          <label className="field"><span>Nascimento</span>
-            <input inputMode="numeric" placeholder="ano" value={p.birth_year ?? ""} onChange={(e) => setP({ ...p, birth_year: num(e.target.value) })} /></label>
-        </div>
-      </section>
 
       <section className="group">
         <h2 className="section-title">Metas</h2>
