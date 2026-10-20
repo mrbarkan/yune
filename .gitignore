@@ -9,3 +9,5 @@ firestore-debug.log
 .DS_Store
 .superpowers/
 functions/.secret.local
+supabase/
+.claude/worktrees/

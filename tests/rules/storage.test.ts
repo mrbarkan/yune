@@ -1,18 +1,28 @@
 import { readFileSync } from "node:fs";
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { afterAll, beforeAll, beforeEach, describe, it } from "vitest";
-import { deleteObject, getBytes, ref, uploadBytes } from "firebase/storage";
+import { deleteObject, getBytes, listAll, ref, uploadBytes } from "firebase/storage";
 
 let env: RulesTestEnvironment;
 
 beforeAll(async () => {
   env = await initializeTestEnvironment({
-    projectId: "demo-yune-storage",
+    projectId: "demo-yune",
     storage: { rules: readFileSync("storage.rules", "utf8"), host: "127.0.0.1", port: 9199 },
   });
 });
 afterAll(() => env.cleanup());
-beforeEach(() => env.clearStorage());
+// clearStorage não esvazia o emulador de forma confiável (e a regra recusa sobrescrever): apaga tudo recursivamente.
+async function clearAll() {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const walk = async (r: ReturnType<typeof ref>): Promise<void> => {
+      const l = await listAll(r);
+      await Promise.all([...l.items.map((i) => deleteObject(i)), ...l.prefixes.map(walk)]);
+    };
+    await walk(ref(ctx.storage()));
+  });
+}
+beforeEach(clearAll);
 
 const seedFile = (path: string, bytes = 16, contentType = "image/jpeg") =>
   env.withSecurityRulesDisabled(async (ctx) => {
@@ -24,11 +34,7 @@ const bob = () => env.authenticatedContext("bob", { email_verified: true }).stor
 const unverified = () => env.authenticatedContext("alice", { email_verified: false }).storage();
 const putExact = (s: ReturnType<typeof alice>, path: string, bytes: number, contentType: string) =>
   uploadBytes(ref(s, path), new Uint8Array(bytes), { contentType });
-// clearStorage não esvazia o emulador de forma confiável, e a regra agora recusa sobrescrever;
-// então cada envio usa um nome novo (prefixo contado) e os testes não dependem da ordem.
-let seq = 0;
-const put = (s: ReturnType<typeof alice>, path: string, bytes: number, contentType: string) =>
-  putExact(s, path.replace(/([^/]+)$/, `${++seq}-$1`), bytes, contentType);
+const put = putExact;
 
 describe("regras: storage", () => {
   it("imagem de 1 KB nas três pastas", async () => {

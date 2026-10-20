@@ -9,7 +9,7 @@ const NOW = "2026-10-19T12:00:00.000Z";
 
 beforeAll(async () => {
   env = await initializeTestEnvironment({
-    projectId: "demo-yune-profile",
+    projectId: "demo-yune",
     firestore: { rules: readFileSync("firestore.rules", "utf8"), host: "127.0.0.1", port: 8085 },
   });
 });

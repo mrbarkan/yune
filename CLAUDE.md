@@ -32,11 +32,18 @@ PWA de diário de saúde (comida, movimento, água, sono). Todo texto de interfa
   `deriveEntitlement` (`functions/src/entitlement.ts`) deriva `pro/until/source`. `billing/{uid}` (customer, assinatura, `trial_used`) é só do servidor:
   as regras negam tudo ao app.
 - Storage CORS (para `getBlob` das fotos privadas): `gcloud storage buckets update gs://<bucket> --cors-file=storage.cors.json`.
-- Emuladores (projeto `demo-yune`; auth 9099, firestore 8085, storage 9199): `npm run emulators`, `npm run dev:emu` (app apontando para eles).
-  Testes: `npm test` (app), `npm run test:rules` (regras, sobe emuladores), `npm --prefix functions test`. Webhook local:
+- Emuladores (projeto `demo-yune`; auth 9099, firestore 8085, storage 9199, functions 5001): `npm run emulators` (compila as functions antes) e
+  `npm run dev:emu` (app apontando para eles). O emulador de functions pede `APP_URL`: criar `functions/.env.local` com `APP_URL=http://localhost:8080` (gitignored).
+  Sem `functions/.secret.local` ele loga um ERRO do Secret Manager para `STRIPE_SECRET_KEY`: esperado, a cobrança simulada continua funcionando.
+  Dados persistidos (`--import`/`--export-on-exit`) podem guardar um `entitlements.stripe` simulado que depois bloqueia um checkout real
+  ("Você já tem o Pro."): limpar ao trocar para chaves de teste reais da Stripe.
+  Testes: `npm run check` (tipos + todos os testes unitários), `npm run test:rules` (regras, sobe emuladores). Webhook local:
   `stripe listen --forward-to http://127.0.0.1:5001/demo-yune/southamerica-east1/stripeWebhook` (o `whsec_` impresso vai em `STRIPE_WEBHOOK_SECRET`).
-- Seed (só emulador, recusa sem `FIRESTORE_EMULATOR_HOST`): `firebase emulators:exec --only auth,firestore,storage --project demo-yune "npm --prefix functions run seed"`
-  — ou `npm --prefix functions run seed` com os emuladores já no ar. Cria `paciente@yune.test` (senha no topo de `functions/scripts/seed.ts`) com 8 semanas de dados.
-- Beta: `npm --prefix functions run grant-beta -- --days 30 [--dry-run] [--project <id>]` grava `beta_until` de todos (pula quem já tem beta mais longo;
-  mantém `stripe`). Fora do emulador exige `--project`. Encerrar o beta = rodar o grant-beta (para dar o prazo final) e, num mesmo release,
-  pôr `PRO_OPEN = false` em `src/lib/pro.ts` e `functions/src/pro.ts`.
+- Cobrança simulada: no emulador (projeto `demo-*`) sem `STRIPE_SECRET_KEY` em `functions/.secret.local`, `getProPrices` / `createCheckout` / `createPortal`
+  simulam (R$ 19,90 / R$ 199,00; teste pela regra `trialFor`). O webhook não muda. Nunca liga em produção (`mockBillingEnabled`).
+- Passeio no navegador com Pro fechado: trocar `PRO_OPEN` para `false` nos dois arquivos **só localmente**, nunca commitar (o teste de paridade exige os dois iguais).
+- Seed (só emulador, recusa sem `FIRESTORE_EMULATOR_HOST`): `npm run seed:emu` com os emuladores no ar. Cria `paciente@yune.test`
+  (senha no topo de `functions/scripts/seed.ts`) com 8 semanas de dados.
+- Beta: `npm --prefix functions run grant-beta -- --days 30 --apply [--project <id>]` grava `beta_until` de todos (pula quem já tem beta mais longo;
+  mantém `stripe`). `--apply` é obrigatório para gravar; sem ele é só simulação (dry-run). `--days` de 1 a 90. Fora do emulador exige `--project`.
+  Encerrar o beta = rodar o grant-beta (para dar o prazo final) e, num mesmo release, pôr `PRO_OPEN = false` em `src/lib/pro.ts` e `functions/src/pro.ts`.

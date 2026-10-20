@@ -3,6 +3,7 @@ import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestE
 import { afterAll, beforeAll, beforeEach, describe, it, vi } from "vitest";
 import { doc, getDoc, getDocs, collection, setDoc, updateDoc, setLogLevel } from "firebase/firestore";
 import { SECTIONS } from "../../src/lib/anamnesis";
+import { DEFAULT_REMINDERS } from "../../src/lib/defaults";
 
 // anamnesis.ts importa o app Firebase (init exige chave de API); SECTIONS é só dados.
 vi.mock("../../src/lib/firebase", () => ({}));
@@ -11,15 +12,10 @@ let env: RulesTestEnvironment;
 setLogLevel("silent");
 const NOW = "2026-10-19T12:00:00.000Z";
 const ID64 = "a".repeat(64);
-// Mesmo formato de DEFAULT_REMINDERS em src/lib/firebase.ts (importar de lá inicializa o app).
-const DEFAULT_REMINDERS = {
-  water_enabled: true, water_every_min: 120, water_start: "09:00", water_end: "21:00",
-  summary_enabled: true, summary_time: "21:30", bedtime_enabled: false, bedtime_time: "23:00",
-};
 
 beforeAll(async () => {
   env = await initializeTestEnvironment({
-    projectId: "demo-yune-data",
+    projectId: "demo-yune",
     firestore: { rules: readFileSync("firestore.rules", "utf8"), host: "127.0.0.1", port: 8085 },
   });
 });
@@ -44,9 +40,19 @@ describe("regras: dados", () => {
     const bad = async (extra: object, id = ID64) => assertFails(setDoc(doc(alice(), `users/alice/push_subscriptions/${id}`), push(extra)));
     await bad({ endpoint: "https://attacker.example/collect" });
     await bad({ endpoint: "http://10.0.0.1/" });
+    await bad({ endpoint: "https://fcm.googleapis.com.evil.example/x" });
+    await bad({ endpoint: "https://fcm.googleapis.com@evil.example/x" });
     await bad({ user_agent: "x".repeat(600) });
     await bad({ created_at: 5 });
     await bad({}, "abc");
+  });
+
+  it("push: aceita endpoints realistas de Mozilla, Apple e WNS", async () => {
+    const ok = async (endpoint: string, id: string) =>
+      assertSucceeds(setDoc(doc(alice(), `users/alice/push_subscriptions/${id}`), push({ endpoint })));
+    await ok("https://updates.push.services.mozilla.com/wpush/v2/gAAAAABk-token", "b".repeat(64));
+    await ok("https://web.push.apple.com/QGxyz123token", "c".repeat(64));
+    await ok("https://wns2-par02p.notify.windows.com/w/?token=BQYAAAAbc", "d".repeat(64));
   });
 
   it("reminders: campos last_* são do servidor", async () => {

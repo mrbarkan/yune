@@ -1,5 +1,5 @@
 // Yune service worker: casca offline + Web Push.
-const CACHE = "yune-v2";
+const CACHE = "yune-v3";
 const SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
@@ -22,7 +22,9 @@ self.addEventListener("fetch", (e) => {
     e.respondWith(fetch(e.request).catch(() => caches.match("/")));
     return;
   }
-  // assets com hash: cache-first
+  // cache-first só para o que é versionado/estático; o resto vai direto à rede.
+  const p = url.pathname;
+  if (!(p.startsWith("/assets/") || p.startsWith("/icons/") || p === "/manifest.webmanifest")) return;
   e.respondWith(
     caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
       if (res.ok) caches.open(CACHE).then((c) => c.put(e.request, res.clone()));
