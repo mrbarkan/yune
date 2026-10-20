@@ -191,7 +191,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
   const [confirm, setConfirm] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
-  if (!allowed) {
+  if (!allowed && !plan) {
     return (
       <section className="group">
         <h2 className="section-title">Dieta <span className="pro-badge">Pro</span></h2>
@@ -250,11 +250,33 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
   }
 
   const t = plan?.targets;
-  const goals = t && {
+  const goals = allowed && t && {
     kcal_goal: t.kcal != null ? clamp(t.kcal, 800, 6000) : profile.kcal_goal,
     water_goal_ml: t.water_ml != null ? clamp(t.water_ml, 250, 8000) : profile.water_goal_ml,
   };
   const goalsDiffer = goals && (goals.kcal_goal !== profile.kcal_goal || goals.water_goal_ml !== profile.water_goal_ml);
+
+  // Sem Pro o plano continua aqui, só para ler (apagar é dado da pessoa).
+  if (!allowed) {
+    return (
+      <section className="group">
+        <h2 className="section-title">Dieta <span className="pro-badge">Pro</span></h2>
+        <button className="diet-card" onClick={onOpen}>
+          <b>{plan!.title}</b>
+          <small>{[plan!.prescriber, plan!.file_name].filter(Boolean).join(" · ") || "Ver dieta"}</small>
+        </button>
+        <p className="note">Seu plano continua aqui. Para enviar uma nova dieta, assine o Pro.</p>
+        {confirm ? (
+          <div className="row">
+            <button className="btn ghost" onClick={() => setConfirm(false)}>Manter</button>
+            <button className="btn danger" onClick={remove}>Apagar dieta</button>
+          </div>
+        ) : (
+          <button className="link" onClick={() => setConfirm(true)}>Remover dieta</button>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="group">

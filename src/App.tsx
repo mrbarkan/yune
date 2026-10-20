@@ -49,7 +49,7 @@ function Shell({ userId }: { userId: string }) {
 
   const ent = useEntitlements(userId);
   const dietAllowed = canUse(ent, "diet");
-  const plan = useDietPlan(dietAllowed, version);
+  const plan = useDietPlan(version);
   const { data: today } = useRange(startOfDay(new Date()), 1, version);
   const todayMl = totals(splitByDay(today, new Date())).waterMl;
 
@@ -63,7 +63,7 @@ function Shell({ userId }: { userId: string }) {
 
   return (
     <div className="app">
-      {tab === "today" && <Today profile={profile} version={version} onChange={bump} plan={plan} onOpenDiet={() => setSheet("diet")}
+      {tab === "today" && <Today profile={profile} version={version} onChange={bump} plan={plan} dietOn={dietAllowed} onOpenDiet={() => setSheet("diet")}
         onEdit={setEdit} />}
       {tab === "week" && <Week profile={profile} version={version} />}
       {tab === "settings" && (
@@ -100,11 +100,11 @@ function Shell({ userId }: { userId: string }) {
           </div>
         </div>
       )}
-      {sheet === "food" && <FoodSheet profile={profile} plan={plan} onClose={close} onSaved={saved} />}
+      {sheet === "food" && <FoodSheet profile={profile} plan={plan} dietOn={dietAllowed} onClose={close} onSaved={saved} />}
       {sheet === "move" && <MoveSheet profile={profile} onClose={close} onSaved={saved} />}
       {sheet === "water" && <WaterSheet profile={profile} todayMl={todayMl} onClose={close} onSaved={bump} onProfile={reload} />}
       {sheet === "sleep" && <SleepSheet onClose={close} onSaved={saved} />}
-      {edit?.kind === "food" && <FoodSheet profile={profile} plan={plan} meal={edit.rec} onClose={close} onSaved={saved} />}
+      {edit?.kind === "food" && <FoodSheet profile={profile} plan={plan} dietOn={dietAllowed} meal={edit.rec} onClose={close} onSaved={saved} />}
       {edit?.kind === "move" && <MoveSheet profile={profile} activity={edit.rec} onClose={close} onSaved={saved} />}
       {edit?.kind === "water" && <WaterSheet profile={profile} todayMl={todayMl} water={edit.rec} onClose={close} onSaved={saved} onProfile={reload} />}
       {edit?.kind === "sleep" && <SleepSheet sleep={edit.rec} onClose={close} onSaved={saved} />}

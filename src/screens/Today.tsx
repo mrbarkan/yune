@@ -15,11 +15,12 @@ type Entry = { id: string; table: Table; at: string; kind: EditTarget["kind"]; t
 
 const PLACE_LABEL = { casa: "em casa", restaurante: "restaurante", delivery: "delivery" } as const;
 
-export default function Today({ profile, version, onChange, plan, onOpenDiet, onEdit }: {
+export default function Today({ profile, version, onChange, plan, dietOn, onOpenDiet, onEdit }: {
   profile: Profile;
   version: number;
   onChange: () => void;
   plan: DietPlan | null;
+  dietOn: boolean;
   onOpenDiet: () => void;
   onEdit: (t: EditTarget) => void;
 }) {
@@ -32,8 +33,8 @@ export default function Today({ profile, version, onChange, plan, onOpenDiet, on
   const left = profile.kcal_goal - t.kcalIn + t.kcalOut;
   const [photos, setPhotos] = useState<Record<string, string>>({});
   const photoKey = data.meals.map((m) => m.photo_path).filter(Boolean).join("|");
-  const warnings = plan ? dietWarnings(plan, data.meals.flatMap((m) => m.items ?? [])) : [];
-  const next = plan && isToday ? mealFor(plan, new Date(), mealName(new Date())) : null;
+  const warnings = plan && dietOn ? dietWarnings(plan, data.meals.flatMap((m) => m.items ?? [])) : [];
+  const next = plan && dietOn && isToday ? mealFor(plan, new Date(), mealName(new Date())) : null;
   const target = plan?.targets;
 
   useEffect(() => {

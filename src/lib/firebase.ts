@@ -177,7 +177,14 @@ export type Reminders = {
   bedtime_time: string;
 };
 
-export type Entitlements = { pro: boolean; until: string | null; source?: string };
+export type StripeState = { status: string; until: string; cancel_at_period_end: boolean; trial_end: string | null };
+export type Entitlements = {
+  pro: boolean;
+  until: string | null;
+  source?: "stripe" | "beta" | null;
+  beta_until?: string | null;
+  stripe?: StripeState | null;
+};
 
 export type DietRule = {
   kind: "avoid" | "limit" | "prefer";

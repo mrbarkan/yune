@@ -5,10 +5,9 @@ import { norm } from "./foods";
 import { fmtNum } from "./time";
 
 /** Dieta ativa (a mais recente, se houver mais de uma). */
-export function useDietPlan(enabled: boolean, version: number) {
+export function useDietPlan(version: number) {
   const [plan, setPlan] = useState<DietPlan | null>(null);
   useEffect(() => {
-    if (!enabled) return setPlan(null);
     let alive = true;
     getDocs(query(table("diet_plans"), where("active", "==", true)))
       .then((snap) => alive && setPlan(rows<DietPlan>(snap).sort((a, b) => b.created_at.localeCompare(a.created_at))[0] ?? null))
@@ -16,7 +15,7 @@ export function useDietPlan(enabled: boolean, version: number) {
     return () => {
       alive = false;
     };
-  }, [enabled, version]);
+  }, [version]);
   return plan;
 }
 

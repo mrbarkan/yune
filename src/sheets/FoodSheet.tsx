@@ -52,9 +52,10 @@ function fromAiItem(it: FoodItem): Food {
 }
 
 /** Nova refeição, ou a refeição `meal` já salva para corrigir. */
-export function FoodSheet({ profile, plan, meal, onClose, onSaved }: {
+export function FoodSheet({ profile, plan, dietOn, meal, onClose, onSaved }: {
   profile: Profile;
   plan: DietPlan | null;
+  dietOn: boolean;
   meal?: Meal;
   onClose: () => void;
   onSaved: () => void;
@@ -223,8 +224,8 @@ export function FoodSheet({ profile, plan, meal, onClose, onSaved }: {
   }
 
   const when = new Date(at);
-  const dietMeal = plan ? mealFor(plan, when, mealName(when)) : null;
-  const warnings = plan && plate.length
+  const dietMeal = plan && dietOn ? mealFor(plan, when, mealName(when)) : null;
+  const warnings = plan && dietOn && plate.length
     ? dietWarnings(
         plan,
         allMeals.filter((m) => m.id !== meal?.id && sameDay(new Date(m.eaten_at), when)).flatMap((m) => m.items ?? []),
