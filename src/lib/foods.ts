@@ -278,7 +278,7 @@ export function parseQuery(raw: string): Parsed {
     return "";
   });
   let size: Parsed["size"] = null;
-  s = s.replace(/\b(pequen|medi|grand)[a-z]*\b|\bmini\b/, (m, k?: string) => {
+  s = s.replace(/\b(pequen|medi|grand)[a-z]*\b|\bmini\b/, (_m, k?: string) => {
     size = (k ?? "pequen") as Parsed["size"];
     return " ";
   });

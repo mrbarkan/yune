@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { memDb } from "./testing/memDb.js";
 import { handleEvent, startCheckout, subscriptionTrial, syncCustomer } from "./billing.js";
 
 const now = new Date("2026-10-19T12:00:00.000Z");
@@ -8,57 +9,6 @@ const sub = (o: Record<string, unknown> = {}) => ({
   id: "sub_1", status: "active", created: 100, cancel_at_period_end: false, trial_start: null, trial_end: null,
   items: { data: [{ current_period_end: sec("2026-11-19T12:00:00.000Z") }] }, ...o,
 });
-
-// Só o que o código usa: doc(path).get()/set(data, { merge }) e runTransaction (tx.get/tx.set). O merge do
-// Firestore é profundo; aqui os objetos aninhados (stripe) são sempre escritos inteiros, então o merge raso dá
-// o mesmo resultado. `log` registra a ordem (leitura e escrita na transação, listagem na Stripe).
-function memDb(init: Record<string, Record<string, unknown>> = {}) {
-  const docs = new Map(Object.entries(init).map(([k, v]) => [k, structuredClone(v)]));
-  const writes: string[] = [];
-  const log: string[] = [];
-  const read = (path: string) => {
-    const d = docs.get(path);
-    return { get: (f: string) => (d ? structuredClone(d[f]) : undefined) };
-  };
-  const write = (path: string, data: Record<string, unknown>, opts: { merge: boolean }) => {
-    writes.push(path);
-    docs.set(path, opts.merge ? { ...docs.get(path), ...structuredClone(data) } : structuredClone(data));
-  };
-  type Ref = { path: string };
-  return {
-    docs,
-    writes,
-    log,
-    doc(path: string) {
-      return {
-        path,
-        async get() {
-          return read(path);
-        },
-        async set(data: Record<string, unknown>, opts: { merge: boolean }) {
-          log.push(`set ${path}`);
-          write(path, data, opts);
-        },
-      };
-    },
-    // Como no Firestore: as escritas da transação só valem quando a função termina.
-    async runTransaction<T>(fn: (tx: { get(ref: Ref): Promise<{ get(f: string): unknown }>; set(ref: Ref, data: Record<string, unknown>, opts: { merge: boolean }): unknown }) => Promise<T>) {
-      const pending: (() => void)[] = [];
-      const result = await fn({
-        async get(ref) {
-          log.push(`tx.get ${ref.path}`);
-          return read(ref.path);
-        },
-        set(ref, data, opts) {
-          log.push(`tx.set ${ref.path}`);
-          pending.push(() => write(ref.path, data, opts));
-        },
-      });
-      pending.forEach((w) => w());
-      return result;
-    },
-  };
-}
 
 const lister = (...lists: unknown[][]) => {
   const list = vi.fn();

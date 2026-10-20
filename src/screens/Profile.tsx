@@ -81,8 +81,6 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
   const goalAnswer = anam?.answers.objetivo?.principal;
   const goal = typeof goalAnswer === "string" && goalAnswer.trim() ? goalAnswer.trim().toLowerCase() : undefined;
   const healthPct = anam ? completion(anam.answers, profile) : 0;
-  // Os demais cartões abrem os detalhes nas próximas tarefas.
-  const soon = () => {};
 
   if (settings) {
     return <Settings profile={profile} ent={ent} onPro={onPro} onSaved={onSaved} diet={diet} onBack={() => setSettings(false)} />;

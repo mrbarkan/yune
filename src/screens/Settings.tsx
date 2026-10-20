@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Segmented } from "@/components/Sheet";
 import { AboutSheet } from "@/sheets/AboutSheet";
 import { suggestedGoal } from "@/lib/activity";
 import { disablePush, enablePush, isIOS, pushState, type PushState } from "@/lib/push";

@@ -17,6 +17,7 @@ const PRICES = { monthly: "yune_pro_monthly", annual: "yune_pro_annual" } as con
 
 /** Só o que o código usa do Firestore (os testes passam um stub em memória). */
 type DocRef = {
+  readonly path: string;
   get(): Promise<{ get(field: string): unknown }>;
   set(data: Record<string, unknown>, options: { merge: boolean }): Promise<unknown>;
 };

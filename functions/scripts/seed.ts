@@ -2,7 +2,7 @@
 // (com os emuladores no ar, ou: firebase emulators:exec --only auth,firestore,storage --project demo-yune "npm --prefix functions run seed").
 // Refaz sempre os mesmos documentos (mesmo uid e ids, PRNG com semente); nunca roda fora do emulador.
 import { readFileSync } from "node:fs";
-import { getApps, initializeApp } from "firebase-admin/app";
+import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";

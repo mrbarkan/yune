@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isActive, proStatus, proStatusLine, stripeActive } from "./pro";
+import { canUse, isActive, proStatus, proStatusLine, stripeActive } from "./pro";
 import type { Entitlements } from "./firebase";
 
 const now = new Date("2026-10-19T12:00:00Z");
@@ -70,4 +70,13 @@ describe("stripeActive", () => {
     expect(stripeActive(ent({ stripe: stripe({ until: "2026-10-18T00:00:00Z" }) }), now)).toBe(false);
     expect(stripeActive(ent({ stripe: stripe({ status: "canceled" }) }), now)).toBe(false);
   });
+});
+
+describe("canUse com o beta fechado", () => {
+  const day = 86_400_000;
+  const iso = (d: number) => new Date(Date.now() + d).toISOString();
+  it("sem Pro: falso", () => expect(canUse(ent({ pro: false, until: null }), "labs", false)).toBe(false));
+  it("Pro até amanhã: verdadeiro", () => expect(canUse(ent({ pro: true, until: iso(day) }), "labs", false)).toBe(true));
+  it("Pro vencido ontem: falso", () => expect(canUse(ent({ pro: true, until: iso(-day) }), "labs", false)).toBe(false));
+  it("com o beta aberto, qualquer um usa", () => expect(canUse(ent({ pro: false }), "labs", true)).toBe(true));
 });

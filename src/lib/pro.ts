@@ -16,8 +16,8 @@ export function isActive(ent: Entitlements, now = new Date()) {
   return ent.pro && (!ent.until || ent.until > now.toISOString());
 }
 
-export function canUse(ent: Entitlements, feature: Feature) {
-  if (FEATURES[feature] !== "pro" || PRO_OPEN) return true;
+export function canUse(ent: Entitlements, feature: Feature, open = PRO_OPEN) {
+  if (FEATURES[feature] !== "pro" || open) return true;
   return isActive(ent);
 }
 
