@@ -1,21 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
 import { replaceDiets } from "./dietReplace.js";
 
-function deps(old: { id: string; file_path: string | null }[]) {
-  const list = vi.fn(async () => [...old, { id: "new", file_path: "diet-plans/u/a.pdf" }]);
-  const create = vi.fn(async () => "new");
+const AT = "2026-10-20T12:00:00.000Z";
+type Old = { id: string; file_path: string | null; created_at?: string | null };
+
+function deps(old: Old[]) {
+  const list = vi.fn(async () => [
+    ...old.map((o) => ({ created_at: "2026-10-01T00:00:00.000Z", ...o })),
+    { id: "new", file_path: "diet-plans/u/a.pdf", created_at: AT },
+  ]);
+  const createActive = vi.fn(async (_data: Record<string, unknown>) => "new");
   const remove = vi.fn(async (_id: string) => {});
   const deactivate = vi.fn(async (_id: string) => {});
   const deleteFile = vi.fn(async (_p: string) => {});
-  return { list, create, remove, deactivate, deleteFile };
+  return { list, createActive, remove, deactivate, deleteFile };
 }
 
 describe("replaceDiets", () => {
   it("cria a nova e apaga as anteriores com arquivo", async () => {
     const d = deps([{ id: "a", file_path: "diet-plans/u/old.pdf" }, { id: "b", file_path: null }]);
-    const id = await replaceDiets(d, { title: "x" });
+    const id = await replaceDiets(d, { title: "x", created_at: AT });
     expect(id).toBe("new");
-    expect(d.create).toHaveBeenCalledWith({ title: "x", active: true });
+    expect(d.createActive).toHaveBeenCalledWith({ title: "x", created_at: AT, active: true });
     expect(d.deleteFile).toHaveBeenCalledTimes(1);
     expect(d.deleteFile).toHaveBeenCalledWith("diet-plans/u/old.pdf");
     expect(d.remove.mock.calls.map((c) => c[0])).toEqual(["a", "b"]);
@@ -25,7 +31,7 @@ describe("replaceDiets", () => {
     const d = deps([{ id: "a", file_path: "p1" }, { id: "b", file_path: "p2" }]);
     d.deleteFile.mockRejectedValueOnce(new Error("boom"));
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
-    const id = await replaceDiets(d, {});
+    const id = await replaceDiets(d, { created_at: AT });
     expect(id).toBe("new");
     expect(d.deleteFile).toHaveBeenCalledTimes(2);
     expect(d.deactivate).toHaveBeenCalledWith("a");
@@ -39,7 +45,7 @@ describe("replaceDiets", () => {
     const d = deps([{ id: "a", file_path: null }, { id: "b", file_path: null }]);
     d.remove.mockRejectedValueOnce(new Error("boom"));
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await replaceDiets(d, {})).toBe("new");
+    expect(await replaceDiets(d, { created_at: AT })).toBe("new");
     expect(d.remove.mock.calls.map((c) => c[0])).toEqual(["a", "b"]);
     err.mockRestore();
   });
@@ -48,15 +54,34 @@ describe("replaceDiets", () => {
     const d = deps([]);
     d.list.mockRejectedValueOnce(new Error("boom"));
     const err = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await replaceDiets(d, {})).toBe("new");
+    expect(await replaceDiets(d, { created_at: AT })).toBe("new");
     expect(d.remove).not.toHaveBeenCalled();
     err.mockRestore();
   });
 
   it("não apaga o arquivo da dieta nova", async () => {
     const d = deps([{ id: "a", file_path: "diet-plans/u/a.pdf" }]);
-    await replaceDiets(d, { file_path: "diet-plans/u/a.pdf" });
+    await replaceDiets(d, { file_path: "diet-plans/u/a.pdf", created_at: AT });
     expect(d.deleteFile).not.toHaveBeenCalled();
     expect(d.remove).toHaveBeenCalledWith("a");
+  });
+
+  it("importação simultânea: não apaga uma dieta mais nova nem a do mesmo instante com id maior", async () => {
+    const d = deps([
+      { id: "old", file_path: "diet-plans/u/old.pdf" },
+      { id: "zzz", file_path: "diet-plans/u/z.pdf", created_at: AT },
+      { id: "newer", file_path: "diet-plans/u/n.pdf", created_at: "2026-10-20T12:00:01.000Z" },
+      { id: "semData", file_path: null, created_at: null },
+    ]);
+    await replaceDiets(d, { created_at: AT });
+    expect(d.remove.mock.calls.map((c) => c[0])).toEqual(["old", "semData"]);
+    expect(d.deleteFile).toHaveBeenCalledWith("diet-plans/u/old.pdf");
+    expect(d.deleteFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("sem created_at nos dados, grava a hora atual", async () => {
+    const d = deps([]);
+    await replaceDiets(d, { title: "x" });
+    expect(typeof d.createActive.mock.calls[0][0].created_at).toBe("string");
   });
 });

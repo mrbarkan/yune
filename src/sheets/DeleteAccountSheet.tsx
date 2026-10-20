@@ -68,7 +68,7 @@ export function DeleteAccountSheet({ onClose }: { onClose: () => void }) {
     } catch (e) {
       const c = (e as { code?: string }).code;
       // A conta já foi apagada (por exemplo, a resposta anterior se perdeu): não há o que confirmar.
-      if (c === "auth/user-not-found" || c === "auth/user-token-expired") return GONE;
+      if (c === "auth/user-not-found") return GONE;
       if (method === "password" && (c === "auth/wrong-password" || c === "auth/invalid-credential")) return "Senha incorreta.";
       return method === "password" ? "Não foi possível confirmar a senha agora. Tente de novo." : REAUTH_FAIL;
     }

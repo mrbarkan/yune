@@ -193,11 +193,20 @@ export const importDietPlan = onCall(
     const rest = clipPlan(unclipped);
 
     // A dieta nova substitui as anteriores (documento e arquivo): ver dietReplace.ts.
-    const col = getFirestore().collection(`users/${uid}/diet_plans`);
+    const db = getFirestore();
+    const col = db.collection(`users/${uid}/diet_plans`);
     const id = await replaceDiets(
       {
-        list: async () => (await col.get()).docs.map((d) => ({ id: d.id, file_path: (d.get("file_path") as string | null) ?? null })),
-        create: async (data) => (await col.add(data)).id,
+        list: async () => (await col.get()).docs.map((d) => ({
+          id: d.id, file_path: (d.get("file_path") as string | null) ?? null, created_at: (d.get("created_at") as string | null) ?? null,
+        })),
+        createActive: (data) => db.runTransaction(async (tx) => {
+          const active = await tx.get(col.where("active", "==", true));
+          const ref = col.doc();
+          active.docs.forEach((d) => tx.update(d.ref, { active: false }));
+          tx.set(ref, data);
+          return ref.id;
+        }),
         remove: async (docId) => void (await col.doc(docId).delete()),
         deactivate: async (docId) => void (await col.doc(docId).update({ active: false })),
         deleteFile: async (p) => void (await getStorage().bucket().file(p).delete({ ignoreNotFound: true })),
