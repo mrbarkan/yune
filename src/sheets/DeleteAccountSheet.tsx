@@ -95,11 +95,12 @@ export function DeleteAccountSheet({ onClose }: { onClose: () => void }) {
       if (res.ok) {
         try { await disablePushQuietly(); } catch { /* o documento já pode ter sumido */ }
         showDeletedNotice();
-        await signOut(auth);
+        // A conta já não existe: se o signOut falhar, recarregar também sai da sessão.
+        await signOut(auth).catch(() => location.reload());
         return;
       }
       if (res.reauth) setConfirmed(false);
-      setErr(res.reauth ? REAUTH_FAIL : (res.error ?? "Não foi possível apagar agora. Tente de novo."));
+      setErr(res.error ?? "Não foi possível apagar agora. Tente de novo.");
     } finally {
       setBusy(false);
     }
