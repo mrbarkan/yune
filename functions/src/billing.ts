@@ -7,6 +7,7 @@ import { defineSecret, defineString } from "firebase-functions/params";
 import { onCall, onRequest } from "firebase-functions/v2/https";
 import Stripe from "stripe";
 import { COUNTING, deriveEntitlement, isIncomplete, stripeStateFrom, trialFor, type StripeState, type Trial } from "./entitlement.js";
+import { MOCK_PRICES, mockBillingEnabled, mockCheckout, mockPortalUrl } from "./mockBilling.js";
 import { REGION } from "./region.js";
 
 const STRIPE_SECRET_KEY = defineSecret("STRIPE_SECRET_KEY");
@@ -192,6 +193,10 @@ export const createCheckout = onCall({ region: REGION, secrets: [STRIPE_SECRET_K
   const plan = (req.data as { plan?: unknown } | null)?.plan;
   if (plan !== "monthly" && plan !== "annual") return { error: "Plano inválido." };
   try {
+    if (mockBillingEnabled()) {
+      console.warn("[cobrança simulada] createCheckout", plan);
+      return await mockCheckout(getFirestore(), { uid: req.auth.uid, plan, appUrl: appUrl(), now: new Date() });
+    }
     return await startCheckout(
       { stripe: client(), db: getFirestore() },
       { uid: req.auth.uid, email: req.auth.token.email, plan, appUrl: appUrl(), now: new Date() },
@@ -204,9 +209,10 @@ export const createCheckout = onCall({ region: REGION, secrets: [STRIPE_SECRET_K
 
 export const createPortal = onCall({ region: REGION, secrets: [STRIPE_SECRET_KEY] }, async (req) => {
   if (!req.auth || req.auth.token.email_verified !== true) return NOT_SIGNED_IN;
-  const customerId = (await getFirestore().doc(`billing/${req.auth.uid}`).get()).get("customer_id") as string | undefined;
-  if (!customerId) return { error: "Você ainda não tem uma assinatura." };
+  if (mockBillingEnabled()) return { url: mockPortalUrl(appUrl()) };
   try {
+    const customerId = (await getFirestore().doc(`billing/${req.auth.uid}`).get()).get("customer_id") as string | undefined;
+    if (!customerId) return { error: "Você ainda não tem uma assinatura." };
     const session = await client().billingPortal.sessions.create({ customer: customerId, return_url: appUrl() });
     return { url: session.url };
   } catch (err) {
@@ -219,6 +225,11 @@ export const createPortal = onCall({ region: REGION, secrets: [STRIPE_SECRET_KEY
 export const getProPrices = onCall({ region: REGION, secrets: [STRIPE_SECRET_KEY] }, async (req) => {
   if (!req.auth || req.auth.token.email_verified !== true) return NOT_SIGNED_IN;
   try {
+    if (mockBillingEnabled()) {
+      console.warn("[cobrança simulada] getProPrices");
+      const { trial } = await trialOf(getFirestore(), req.auth.uid, new Date());
+      return { ...MOCK_PRICES, trial };
+    }
     const { data } = await client().prices.list({ lookup_keys: Object.values(PRICES), active: true, limit: 10 });
     const amount = (key: string) => {
       const p = data.find((x) => x.lookup_key === key);
