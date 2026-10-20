@@ -34,7 +34,7 @@ export function fmtLocal(iso: string | null | undefined, tz: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const p = Object.fromEntries(
-    new Intl.DateTimeFormat("pt-BR", { timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    new Intl.DateTimeFormat("pt-BR", { timeZone: tz || undefined, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
       .formatToParts(d).map((x) => [x.type, x.value]),
   );
   return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
@@ -73,7 +73,7 @@ export function exportTables(d: ExportData, tz: string): ExportTable[] {
     { name: "Água", columns: ["Data", "ml"], rows: byDate(d.water, (w) => w.drank_at).map((w) => [f(w.drank_at), w.ml]) },
     { name: "Sono", columns: ["Dormiu", "Acordou", "Duração (min)"],
       rows: byDate(d.sleep, (s) => s.bed_at).map((s) => [
-        f(s.bed_at), f(s.wake_at), s.wake_at ? Math.round((Date.parse(s.wake_at) - Date.parse(s.bed_at)) / 60_000) : null,
+        f(s.bed_at), f(s.wake_at), s.wake_at && s.bed_at ? Math.round((Date.parse(s.wake_at) - Date.parse(s.bed_at)) / 60_000) : null,
       ]) },
     { name: "Movimento", columns: ["Data", "Atividade", "Duração (min)", "Intensidade", "kcal", "Observação"],
       rows: byDate(d.activities, (a) => a.started_at).map((a) => [f(a.started_at), a.kind, a.duration_min, a.intensity, a.kcal, a.note]) },
@@ -88,7 +88,7 @@ export function exportTables(d: ExportData, tz: string): ExportTable[] {
         f(b.measured_at), b.device, b.weight_kg, b.fat_pct, b.fat_kg, b.muscle_kg, b.lean_kg, b.visceral, b.bmr_kcal, b.water_l, b.ecw_tbw, b.phase_angle,
       ]) },
     { name: "Exames", columns: ["Coleta", "Laboratório", "Exame", "Valor", "Número", "Unidade", "Ref. mínima", "Ref. máxima", "Referência"],
-      rows: byDate(d.labs, (l) => l.collected_at).flatMap((l) => l.results.map((r): Cell[] => [
+      rows: byDate(d.labs, (l) => l.collected_at).flatMap((l) => (l.results ?? []).map((r): Cell[] => [
         f(l.collected_at), l.lab, r.name || r.code, r.value_text || (r.value == null ? "" : String(r.value)), r.value, r.unit, r.ref_low, r.ref_high, r.ref_text,
       ])) },
     { name: "Questionário", columns: ["Seção", "Pergunta", "Resposta"], rows: quiz },
@@ -96,7 +96,7 @@ export function exportTables(d: ExportData, tz: string): ExportTable[] {
       "Título", "Prescritor", "Emitida em", "Ativa", "kcal", "Proteína (g)", "Carboidrato (g)", "Gordura (g)", "Fibra (g)", "Água (ml)"],
       rows: byDate(d.diet, (x) => x.created_at).map((x) => [
         x.title, x.prescriber, x.issued_on, x.active ? "Sim" : "Não",
-        x.targets.kcal, x.targets.protein_g, x.targets.carbs_g, x.targets.fat_g, x.targets.fiber_g, x.targets.water_ml,
+        x.targets?.kcal, x.targets?.protein_g, x.targets?.carbs_g, x.targets?.fat_g, x.targets?.fiber_g, x.targets?.water_ml,
       ]) },
   ];
 }

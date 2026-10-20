@@ -81,18 +81,6 @@ describe("export", () => {
     expect(JSON.stringify(t)).not.toContain("body-photos");
     expect(JSON.stringify(t)).not.toContain("photo");
   });
-});
-
-describe("pdfText", () => {
-  it("troca sinais de comparação por ASCII em vez de sumir com eles", () => {
-    expect(pdfText("Desejável: ≥ 40")).toBe("Desejável: >= 40");
-    expect(pdfText("≤ 0,5 · −1,2 · ≠ 3 · ≈ 4")).toBe("<= 0,5 · -1,2 · != 3 · ~ 4");
-  });
-  it("mantém Latin-1 e tira o que a fonte não tem", () => {
-    expect(pdfText("Ação 5 µg/m² — ok 😀")).toBe("Ação 5 µg/m² — ok ");
-    expect(pdfText(null)).toBe("");
-    expect(pdfText(12.5)).toBe("12.5");
-  });
 
   it("doc antigo sem data não quebra a exportação", () => {
     const t = exportTables({
@@ -110,5 +98,33 @@ describe("pdfText", () => {
 
   it("fmtLocal com data inválida devolve vazio", () => {
     expect(fmtLocal("x", "America/Sao_Paulo")).toBe("");
+  });
+
+  it("fuso vazio ou ausente não quebra a formatação", () => {
+    expect(() => fmtLocal("2026-10-19T15:00:00.000Z", "")).not.toThrow();
+    expect(fmtLocal("2026-10-19T15:00:00.000Z", "")).toMatch(/^19\/10\/2026 \d\d:\d\d$/);
+  });
+
+  it("labs sem results, dieta sem targets e sono sem bed_at não quebram", () => {
+    const t = exportTables({
+      ...empty,
+      labs: [{ id: "l", collected_at: "2026-10-19T15:00:00.000Z", lab: "X" } as never],
+      diet: [{ id: "d", title: "D", active: true } as never],
+      sleep: [{ id: "s", wake_at: "2026-10-19T10:00:00.000Z" } as never],
+    }, tz);
+    expect(t.find((x) => x.name === "Sono")!.rows[0]![2]).toBeNull();
+  });
+
+});
+
+describe("pdfText", () => {
+  it("troca sinais de comparação por ASCII em vez de sumir com eles", () => {
+    expect(pdfText("Desejável: ≥ 40")).toBe("Desejável: >= 40");
+    expect(pdfText("≤ 0,5 · −1,2 · ≠ 3 · ≈ 4")).toBe("<= 0,5 · -1,2 · != 3 · ~ 4");
+  });
+  it("mantém Latin-1 e tira o que a fonte não tem", () => {
+    expect(pdfText("Ação 5 µg/m² — ok 😀")).toBe("Ação 5 µg/m² — ok ");
+    expect(pdfText(null)).toBe("");
+    expect(pdfText(12.5)).toBe("12.5");
   });
 });

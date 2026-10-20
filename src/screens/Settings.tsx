@@ -160,7 +160,7 @@ export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }:
       <ExportSection profile={p} />
 
       <section className="group">
-        <button className="btn ghost" disabled={leaving} onClick={async () => { setLeaving(true); await disablePushQuietly(); await signOut(auth); }}>
+        <button className="btn ghost" disabled={leaving} onClick={async () => { setLeaving(true); try { await disablePushQuietly(); await signOut(auth); } finally { setLeaving(false); } }}>
           {leaving ? "Saindo…" : "Sair"}
         </button>
         <button className="link" onClick={() => setAbout(true)}>Sobre o Yune</button>
@@ -349,6 +349,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
         ) : (
           <button className="link" onClick={() => setConfirm(true)}>Remover dieta</button>
         )}
+        {msg && <p className={`note ${msg.kind}`}>{msg.text}</p>}
       </section>
     );
   }
