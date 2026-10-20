@@ -32,11 +32,18 @@ describe("health", () => {
     expect(bodyCompDelta([A, B, C], "Tanita")).toBeNull();
   });
   it("usa lean_kg quando muscle_kg falta", () => {
-    const a = { ...A, muscle_kg: null, lean_kg: 50 };
+    const a = { ...A, lean_kg: 50 };
     const c = { ...C, muscle_kg: null, lean_kg: 49 };
     const d = bodyCompDelta([a, c], "InBody")!;
     expect(d.muscle_field).toBe("lean_kg");
     expect(d.muscle_kg).toBeCloseTo(-1);
+  });
+  it("campos diferentes nas duas leituras -> sem variação de músculo", () => {
+    const a = { ...A, lean_kg: null };
+    const c = { ...C, muscle_kg: null, lean_kg: 49 };
+    const d = bodyCompDelta([a, c], "InBody")!;
+    expect(d.muscle_field).toBeNull();
+    expect(d.muscle_kg).toBeNull();
   });
   it("aparelho ignora caixa e espaços", () => {
     const a = { ...A, device: "inbody 570" };
