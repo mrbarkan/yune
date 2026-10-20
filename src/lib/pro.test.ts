@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isActive, proStatus } from "./pro";
+import { isActive, proStatus, proStatusLine } from "./pro";
 import type { Entitlements } from "./firebase";
 
 const now = new Date("2026-10-19T12:00:00Z");
@@ -42,5 +42,18 @@ describe("proStatus", () => {
     const r = proStatus(ent({ pro: true, beta_until: "2026-11-10T00:00:00Z",
       stripe: stripe({ status: "trialing", until: "2026-11-10T00:00:00Z", trial_end: "2026-11-10T00:00:00Z" }) }), now);
     expect(r).toEqual({ status: "trial", until: "2026-11-10T00:00:00Z" });
+  });
+});
+
+describe("proStatusLine", () => {
+  const tz = "America/Sao_Paulo";
+  it("active", () => expect(proStatusLine({ status: "active", until: "2026-11-19T15:00:00Z" }, tz)).toBe("Pro até 19/11"));
+  it("trial", () => expect(proStatusLine({ status: "trial", until: "2026-10-26T15:00:00Z" }, tz)).toBe("Teste grátis até 26/10"));
+  it("canceling", () => expect(proStatusLine({ status: "canceling", until: "2026-11-19T15:00:00Z" }, tz)).toBe("Cancelado — Pro até 19/11"));
+  it("beta usa o fuso (01:00Z do dia 19 ainda é dia 18 em SP)", () =>
+    expect(proStatusLine({ status: "beta", until: "2026-11-19T01:00:00Z" }, tz)).toBe("Pro do beta até 18/11"));
+  it("past_due e none", () => {
+    expect(proStatusLine({ status: "past_due", until: null }, tz)).toBe("Pagamento pendente — atualize o cartão");
+    expect(proStatusLine({ status: "none", until: null }, tz)).toBeNull();
   });
 });

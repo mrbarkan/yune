@@ -3,7 +3,7 @@ import { onSnapshot } from "firebase/firestore";
 import { entitlementsDoc, type Entitlements } from "./firebase";
 
 // Beta: todo mundo tem Pro enquanto não houver cobrança. Desligar junto com PRO_OPEN em functions/src/pro.ts.
-const PRO_OPEN = true;
+export const PRO_OPEN = true;
 
 /** Recursos e o plano que libera cada um. Novos recursos pagos entram aqui. */
 export const FEATURES = { diet: "pro", labs: "pro", body_comp: "pro" } as const;
@@ -49,4 +49,22 @@ export function useEntitlements(userId: string) {
     [userId],
   );
   return ent;
+}
+
+/** dd/mm no fuso da pessoa. */
+export function fmtDayMonth(iso: string, tz: string) {
+  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: tz });
+}
+
+/** Texto do status do Pro em Ajustes; null quando não há nada a dizer. */
+export function proStatusLine(s: { status: ProStatus; until: string | null }, tz: string): string | null {
+  const d = s.until ? fmtDayMonth(s.until, tz) : "";
+  switch (s.status) {
+    case "trial": return `Teste grátis até ${d}`;
+    case "active": return `Pro até ${d}`;
+    case "canceling": return `Cancelado — Pro até ${d}`;
+    case "past_due": return "Pagamento pendente — atualize o cartão";
+    case "beta": return `Pro do beta até ${d}`;
+    default: return null;
+  }
 }

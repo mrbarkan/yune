@@ -3,19 +3,20 @@ import { onIdTokenChanged, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { splitByDay, totals, useProfile, useRange } from "@/lib/data";
 import { useDietPlan } from "@/lib/diet";
-import { canUse, useEntitlements } from "@/lib/pro";
+import { canUse, proStatus, useEntitlements } from "@/lib/pro";
+import { parseProReturn, withoutProParam } from "@/lib/proReturn";
 import { startOfDay } from "@/lib/time";
 import Auth from "@/screens/Auth";
 import Today, { type EditTarget } from "@/screens/Today";
 import Week from "@/screens/Week";
 import Profile from "@/screens/Profile";
 import { PrivateImage } from "@/components/PrivateImage";
-import { Sheet } from "@/components/Sheet";
 import { FoodSheet } from "@/sheets/FoodSheet";
 import { MoveSheet } from "@/sheets/MoveSheet";
 import { WaterSheet } from "@/sheets/WaterSheet";
 import { SleepSheet } from "@/sheets/SleepSheet";
 import { DietSheet } from "@/sheets/DietSheet";
+import { ProSheet } from "@/sheets/ProSheet";
 
 type Tab = "today" | "week" | "profile";
 type SheetKind = "menu" | "food" | "move" | "water" | "sleep" | "diet" | "pro" | null;
@@ -51,6 +52,15 @@ function Shell({ userId }: { userId: string }) {
 
   const ent = useEntitlements(userId);
   const dietAllowed = canUse(ent, "diet");
+  // Volta do Checkout: ok = espera o servidor liberar; cancel = só limpa a URL.
+  const [proReturn, setProReturn] = useState(() => parseProReturn(location.search));
+  const proLive = proStatus(ent).status !== "none";
+  useEffect(() => {
+    if (proReturn === "cancel" || (proReturn === "ok" && proLive)) {
+      history.replaceState(null, "", withoutProParam(location.href));
+      setProReturn(null);
+    }
+  }, [proReturn, proLive]);
   const plan = useDietPlan(version);
   const { data: today } = useRange(startOfDay(new Date()), 1, version);
   const todayMl = totals(splitByDay(today, new Date())).waterMl;
@@ -65,6 +75,7 @@ function Shell({ userId }: { userId: string }) {
 
   return (
     <div className="app">
+      {proReturn === "ok" && <p className="note ok pro-return" role="status">Assinatura recebida. O Pro libera em instantes.</p>}
       {tab === "today" && <Today profile={profile} version={version} onChange={bump} plan={plan} dietOn={dietAllowed} onOpenDiet={() => setSheet("diet")}
         onEdit={setEdit} />}
       {tab === "week" && <Week profile={profile} version={version} />}
@@ -112,7 +123,7 @@ function Shell({ userId }: { userId: string }) {
       {edit?.kind === "move" && <MoveSheet profile={profile} activity={edit.rec} onClose={close} onSaved={saved} />}
       {edit?.kind === "water" && <WaterSheet profile={profile} todayMl={todayMl} water={edit.rec} onClose={close} onSaved={saved} onProfile={reload} />}
       {edit?.kind === "sleep" && <SleepSheet sleep={edit.rec} onClose={close} onSaved={saved} />}
-      {sheet === "pro" && <Sheet title="Yune Pro" onClose={close}><p className="note">Em breve: exames, composição corporal e dieta prescrita.</p></Sheet>}
+      {sheet === "pro" && <ProSheet onClose={close} />}
       {sheet === "diet" && plan && <DietSheet plan={plan} onClose={close} />}
     </div>
   );

@@ -508,3 +508,11 @@ input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; bo
 .lab-results li small { grid-column: 1 / -1; }
 .lab-results li.out > span:nth-child(2), .lab-out { color: var(--food); }
 .row.sp { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+
+/* Folha do Pro */
+.pro-benefits { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.pro-benefits li { display: grid; gap: 2px; }
+.pro-benefits small { color: var(--ink-2); font-size: 13px; }
+.pro-plans { display: grid; gap: 10px; }
+.pro-plans .btn { width: 100%; }
+.pro-return { padding: 12px 20px 0; }

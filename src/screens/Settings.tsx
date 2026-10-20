@@ -8,13 +8,16 @@ import { deleteDoc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { deleteObject, ref, uploadBytes } from "firebase/storage";
 import { compressImage } from "@/lib/image";
 import {
-  auth, DEFAULT_REMINDERS, importDietPlan, profileDoc, remindersDoc, row, storage, type DietPlan, type Profile, type Reminders,
+  auth, createPortal, DEFAULT_REMINDERS, importDietPlan, profileDoc, remindersDoc, row, storage, type DietPlan, type Entitlements, type Profile, type Reminders,
 } from "@/lib/firebase";
 import { fmtLiters, fmtNum } from "@/lib/time";
+import { PRO_OPEN, proStatus, proStatusLine } from "@/lib/pro";
 
 type DietProps = { allowed: boolean; plan: DietPlan | null; onOpen: () => void; onChanged: () => void };
 
-export default function Settings({ profile, onSaved, diet, onBack }: { profile: Profile; onSaved: () => void; diet: DietProps; onBack: () => void }) {
+export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }: {
+  profile: Profile; ent: Entitlements; onPro: () => void; onSaved: () => void; diet: DietProps; onBack: () => void;
+}) {
   const [p, setP] = useState(profile);
   const [r, setR] = useState<Reminders | null>(null);
   const [push, setPush] = useState<PushState>("off");
@@ -86,6 +89,8 @@ export default function Settings({ profile, onSaved, diet, onBack }: { profile: 
         {msg && <p className="note">{msg}</p>}
       </section>
 
+      <ProSection ent={ent} tz={p.timezone} onPro={onPro} />
+
       <DietSection {...diet} profile={p} onGoals={async (goals) => {
         const next = { ...p, ...goals };
         setP(next);
@@ -148,6 +153,36 @@ export default function Settings({ profile, onSaved, diet, onBack }: { profile: 
       </section>
       {about && <AboutSheet onClose={closeAbout} />}
     </main>
+  );
+}
+
+function ProSection({ ent, tz, onPro }: { ent: Entitlements; tz: string; onPro: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const st = proStatus(ent);
+  const line = proStatusLine(st, tz);
+
+  async function manage() {
+    setBusy(true);
+    setErr("");
+    const r = await createPortal();
+    if (r.url) {
+      location.href = r.url;
+      return;
+    }
+    setErr(r.error || "Não foi possível abrir a assinatura agora.");
+    setBusy(false);
+  }
+
+  return (
+    <section className="group">
+      <h2 className="section-title">Yune Pro</h2>
+      {PRO_OPEN && <p className="note">Durante o beta, o Pro está liberado para todos.</p>}
+      {line && <p className={st.status === "past_due" ? "note err" : "note"}>{line}</p>}
+      {st.status === "none" && !PRO_OPEN && <button className="btn ghost" onClick={onPro}>Conhecer o Pro</button>}
+      {ent.stripe && <button className="btn ghost" disabled={busy} onClick={manage}>{busy ? "Abrindo…" : "Gerenciar assinatura"}</button>}
+      {err && <p className="note err">{err}</p>}
+    </section>
   );
 }
 

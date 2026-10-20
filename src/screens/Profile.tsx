@@ -85,7 +85,7 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
   const soon = () => {};
 
   if (settings) {
-    return <Settings profile={profile} onSaved={onSaved} diet={diet} onBack={() => setSettings(false)} />;
+    return <Settings profile={profile} ent={ent} onPro={onPro} onSaved={onSaved} diet={diet} onBack={() => setSettings(false)} />;
   }
 
   if (meas) {
