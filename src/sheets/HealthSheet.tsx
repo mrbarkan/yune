@@ -3,14 +3,13 @@ import { getDocs, query, where } from "firebase/firestore";
 import { Sheet } from "@/components/Sheet";
 import supplements from "@/data/supplements.json";
 import {
-  avgSleepHours, BRISTOL, completion, saveAnswers, sectionDone, visibleSections,
-  type Answers, type FieldDef, type SectionDef, type Value,
+  avgSleepHours, BRISTOL, completion, createAutosaver, saveAnswers, sectionDone, visibleSections,
+  type Answers, type SaveStatus, type FieldDef, type SectionDef, type Value,
 } from "@/lib/anamnesis";
+import { parseDecimal } from "@/lib/num";
 import { rows, table, type Profile, type Sleep } from "@/lib/firebase";
 
 const SUPPLEMENT_NAMES = [...new Set((supplements as { name: string }[]).map((s) => s.name))];
-
-type Status = "" | "saving" | "saved" | "error";
 
 type Props = { profile: Profile; initial: Answers; onClose: () => void; onSaved: () => void };
 
@@ -18,43 +17,29 @@ type Props = { profile: Profile; initial: Answers; onClose: () => void; onSaved:
 export function HealthSheet({ profile, initial, onClose, onSaved }: Props) {
   const [answers, setAnswers] = useState<Answers>(initial);
   const [open, setOpen] = useState<string | null>(null);
-  const [status, setStatus] = useState<Status>("");
+  const [status, setStatus] = useState<SaveStatus>("");
   const latest = useRef(answers);
-  const dirty = useRef(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const chain = useRef<Promise<void>>(Promise.resolve());
-  const wrote = useRef(false);
+  const tz = useRef(profile.timezone);
+  const onSavedRef = useRef(onSaved);
+  onSavedRef.current = onSaved;
+  const saver = useRef<ReturnType<typeof createAutosaver>>(undefined);
+  if (!saver.current) {
+    saver.current = createAutosaver(() => saveAnswers(latest.current, new Date(), tz.current), 1000, setStatus);
+  }
+  const s = saver.current;
 
-  // Salva o que estiver pendente; erro volta para quem chamou e fica na tela.
-  const flush = useCallback((): Promise<boolean> => {
-    clearTimeout(timer.current);
-    const run = chain.current.then(async () => {
-      if (!dirty.current) return;
-      dirty.current = false;
-      setStatus("saving");
-      try {
-        await saveAnswers(latest.current, new Date(), profile.timezone);
-        wrote.current = true;
-        setStatus(dirty.current ? "saving" : "saved");
-      } catch (e) {
-        dirty.current = true;
-        setStatus("error");
-        throw e;
-      }
-    });
-    chain.current = run.catch(() => {});
-    return run.then(() => true, () => false);
-  }, [profile.timezone]);
+  // Se a tela sair sem passar por "fechar", grava a pendência uma vez e avisa o Perfil.
+  useEffect(() => () => {
+    void s.dispose().then(() => s.wrote && onSavedRef.current());
+  }, [s]);
+
+  const flush = s.flush;
 
   const change = useCallback((section: SectionDef["key"], key: string, v: Value) => {
-    const next = { ...latest.current, [section]: { ...latest.current[section], [key]: v } };
-    latest.current = next;
-    dirty.current = true;
-    setAnswers(next);
-    setStatus("");
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => void flush(), 1000);
-  }, [flush]);
+    latest.current = { ...latest.current, [section]: { ...latest.current[section], [key]: v } };
+    setAnswers(latest.current);
+    s.touch();
+  }, [s]);
 
   // Horas de sono: média dos últimos 14 dias, só preenche se estiver vazio (e não cria versão sozinha).
   useEffect(() => {
@@ -78,11 +63,9 @@ export function HealthSheet({ profile, initial, onClose, onSaved }: Props) {
   // Sai da tela só se salvou; se falhar, fica aberta com o erro.
   const close = useCallback(() => {
     void flush().then((ok) => {
-      if (!ok) return;
-      if (wrote.current) onSaved();
-      onClose();
+      if (ok) onClose();
     });
-  }, [flush, onClose, onSaved]);
+  }, [flush, onClose]);
 
   const pct = completion(answers, profile);
 
@@ -129,13 +112,7 @@ function Field({ def, sectionKey, value, onChange }: { def: FieldDef; sectionKey
         </label>
       );
     case "number":
-      return <label className="field"><span>{def.label}</span>
-        <input inputMode="decimal" value={value == null ? "" : String(value).replace(".", ",")}
-          onChange={(e) => {
-            const t = e.target.value.trim();
-            const n = Number(t.replace(",", "."));
-            onChange(t === "" || Number.isNaN(n) ? null : n);
-          }} /></label>;
+      return <NumberField def={def} value={value as number | null} onChange={onChange} />;
     case "choice":
       return (
         <div className="field" role="group" aria-labelledby={id}><span id={id}>{def.label}</span>
@@ -196,5 +173,34 @@ function SupplementAdd({ onAdd }: { onAdd: (name: string) => void }) {
       <datalist id="supp-names">{SUPPLEMENT_NAMES.map((n) => <option key={n} value={n} />)}</datalist>
       <button type="button" className="btn ghost small" onClick={add}>Adicionar</button>
     </span>
+  );
+}
+
+/** Número com texto local: "7," continua "7,"; só grava valor válido dentro de min/max. */
+function NumberField({ def, value, onChange }: { def: FieldDef; value: number | null; onChange: (v: Value) => void }) {
+  const [text, setText] = useState(value == null ? "" : String(value).replace(".", ","));
+  const [hint, setHint] = useState("");
+  // Valor que chega de fora (média de sono) entra se o campo estiver vazio.
+  useEffect(() => {
+    if (value != null && text.trim() === "") setText(String(value).replace(".", ","));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+  function edit(t: string) {
+    setText(t);
+    if (t.trim() === "") { setHint(""); onChange(null); return; }
+    const n = parseDecimal(t);
+    if (n == null) { setHint("Digite um número."); return; }
+    if ((def.min != null && n < def.min) || (def.max != null && n > def.max)) {
+      setHint(`Use um valor entre ${def.min ?? 0} e ${def.max}.`);
+      return;
+    }
+    setHint("");
+    onChange(n);
+  }
+  return (
+    <label className="field"><span>{def.label}</span>
+      <input inputMode="decimal" value={text} onChange={(e) => edit(e.target.value)} />
+      {hint && <small className="note err">{hint}</small>}
+    </label>
   );
 }

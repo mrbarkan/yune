@@ -110,14 +110,15 @@ export function avgSleepHours(list: Sleep[], now: Date): number | null {
   return Math.round((mins.reduce((a, b) => a + b, 0) / mins.length / 60) * 10) / 10;
 }
 
-/** Versão mais recente do questionário (null se nunca preenchido). */
-export function useLatestAnamnesis(version: number): { latest: Anamnesis | null; loaded: boolean } {
-  const [state, setState] = useState<{ latest: Anamnesis | null; loaded: boolean }>({ latest: null, loaded: false });
+/** Versão mais recente do questionário (null se nunca preenchido). `error` = a leitura falhou (não abrir o formulário). */
+export function useLatestAnamnesis(version: number): { latest: Anamnesis | null; loaded: boolean; error: boolean } {
+  const [state, setState] = useState<{ latest: Anamnesis | null; loaded: boolean; error: boolean }>({ latest: null, loaded: false, error: false });
   useEffect(() => {
     let alive = true;
+    setState((s) => ({ ...s, loaded: false, error: false }));
     getDocs(query(table("anamnesis"), orderBy("updated_at", "desc"), limit(1)))
-      .then((snap) => alive && setState({ latest: rows<Anamnesis>(snap)[0] ?? null, loaded: true }))
-      .catch(() => alive && setState((s) => ({ ...s, loaded: true })));
+      .then((snap) => alive && setState({ latest: rows<Anamnesis>(snap)[0] ?? null, loaded: true, error: false }))
+      .catch(() => alive && setState((s) => ({ ...s, loaded: true, error: true })));
     return () => {
       alive = false;
     };
@@ -128,4 +129,57 @@ export function useLatestAnamnesis(version: number): { latest: Anamnesis | null;
 /** Grava o questionário inteiro no documento do dia: no mesmo dia sobrescreve, em outro dia cria nova versão. */
 export async function saveAnswers(answers: Answers, now: Date, tz: string) {
   await setDoc(row("anamnesis", dayKey(now, tz)), { updated_at: now.toISOString(), answers });
+}
+
+export type SaveStatus = "" | "saving" | "saved" | "error";
+
+/**
+ * Salva depois de `delayMs` sem mudanças. `touch` marca como pendente; `flush` salva já (uma escrita por vez,
+ * só se houver pendência) e devolve false se falhar, mantendo o pendente para tentar de novo.
+ * `dispose` cancela o timer e salva uma última vez se houver pendência; depois disso não avisa mais o status.
+ */
+export function createAutosaver(save: () => Promise<void>, delayMs: number, onStatus: (s: SaveStatus) => void = () => {}) {
+  let dirty = false;
+  let alive = true;
+  let wrote = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let chain: Promise<unknown> = Promise.resolve();
+  const status = (s: SaveStatus) => alive && onStatus(s);
+
+  function flush(): Promise<boolean> {
+    clearTimeout(timer);
+    const run = chain.then(async () => {
+      if (!dirty) return;
+      dirty = false;
+      status("saving");
+      try {
+        await save();
+        wrote = true;
+        status(dirty ? "saving" : "saved");
+      } catch (e) {
+        dirty = true;
+        status("error");
+        throw e;
+      }
+    });
+    chain = run.catch(() => {});
+    return run.then(() => true, () => false);
+  }
+
+  return {
+    touch() {
+      dirty = true;
+      status("");
+      clearTimeout(timer);
+      timer = setTimeout(() => void flush(), delayMs);
+    },
+    flush,
+    /** Já gravou alguma coisa nesta sessão? */
+    get wrote() { return wrote; },
+    dispose(): Promise<boolean> {
+      const p = flush();
+      alive = false;
+      return p;
+    },
+  };
 }

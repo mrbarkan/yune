@@ -10,6 +10,7 @@ import PhotosView from "@/screens/PhotosView";
 import { sessions, useBodyPhotos } from "@/lib/photos";
 import Settings from "@/screens/Settings";
 import { ProfileEditSheet } from "@/sheets/ProfileEditSheet";
+import { Sheet } from "@/components/Sheet";
 import { HealthSheet } from "@/sheets/HealthSheet";
 import { completion, useLatestAnamnesis } from "@/lib/anamnesis";
 
@@ -62,7 +63,7 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
   const closeEdit = useCallback(() => setEdit(false), []);
   const [healthOpen, setHealthOpen] = useState(false);
   const [hv, setHv] = useState(0);
-  const { latest: anam, loaded: anamLoaded } = useLatestAnamnesis(version + hv);
+  const { latest: anam, loaded: anamLoaded, error: anamErr } = useLatestAnamnesis(version + hv);
   const closeHealth = useCallback(() => setHealthOpen(false), []);
   const bumpHealth = useCallback(() => setHv((n) => n + 1), []);
   const goalAnswer = anam?.answers.objetivo?.principal;
@@ -163,7 +164,13 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
         </Card>
       </div>
 
-      {healthOpen && anamLoaded && <HealthSheet profile={profile} initial={anam?.answers ?? {}} onClose={closeHealth} onSaved={bumpHealth} />}
+      {healthOpen && anamErr && (
+        <Sheet title="Sua saúde" onClose={closeHealth}>
+          <p className="note err">Não foi possível carregar seu questionário. Para não sobrescrever suas respostas, ele não foi aberto.</p>
+          <button className="btn primary" onClick={bumpHealth}>Tentar de novo</button>
+        </Sheet>
+      )}
+      {healthOpen && anamLoaded && !anamErr && <HealthSheet profile={profile} initial={anam?.answers ?? {}} onClose={closeHealth} onSaved={bumpHealth} />}
       {edit && <ProfileEditSheet profile={profile} onClose={closeEdit} onSaved={() => { closeEdit(); onSaved(); }} />}
     </main>
   );
