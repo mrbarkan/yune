@@ -6,7 +6,7 @@ import { collectedAtFor } from "@/lib/labreports";
 import { LAB_CATALOG } from "@/lib/labs";
 import { parseDecimal } from "@/lib/num";
 import { localDay } from "@/lib/photos";
-import { useAiConsent } from "@/lib/useAiConsent";
+import { markAiConsentRequired, useAiConsent } from "@/lib/useAiConsent";
 
 const show = (n: number | null | undefined) => (n == null ? "" : String(n).replace(".", ","));
 const dayOf = (iso: string | undefined, tz: string) => {
@@ -77,14 +77,20 @@ export function LabSheet({ profile, rec, onClose, onSaved }: {
 
   const consent = useAiConsent(profile);
 
-  async function onFiles(files: File[]) {
+  // Confere os arquivos antes de pedir consentimento; só então envia.
+  function pickFiles(files: File[]) {
     if (!files.length) return;
     setMsg("");
     const isPdf = (f: File) => f.type === "application/pdf" || /\.pdf$/i.test(f.name);
     if (files.some(isPdf) && files.length > 1) return setMsg("Envie um PDF sozinho, ou até 6 fotos.");
     if (files.length > 6) return setMsg("Envie no máximo 6 fotos.");
+    consent.ask(() => onFiles(files));
+  }
+
+  async function onFiles(files: File[]) {
     setStage("reading");
     const up: string[] = [];
+    let again = false;
     try {
       for (const f of files) {
         up.push(await uploadHealthFile(f));
@@ -93,6 +99,10 @@ export function LabSheet({ profile, rec, onClose, onSaved }: {
       pending.current = up;
       const res = await readHealthDoc<LabsDraft>({ mode: "labs", paths: up });
       if (cancelled.current) throw new Error("");
+      if (res.consent === "required") {
+        again = true;
+        throw new Error("");
+      }
       if (res.error || !res.draft) throw new Error(res.error || "Não foi possível ler o documento agora.");
       const d = res.draft;
       setLab(d.lab ?? "");
@@ -104,8 +114,12 @@ export function LabSheet({ profile, rec, onClose, onSaved }: {
       await Promise.all(up.map((p) => deleteHealthFile(p).catch(() => {})));
       pending.current = [];
       if (cancelled.current) return;
-      setMsg((e as Error).message || "Não foi possível enviar.");
       setStage("pick");
+      if (again) {
+        markAiConsentRequired(profile.id);
+        return consent.ask(() => onFiles(files));
+      }
+      setMsg((e as Error).message || "Não foi possível enviar.");
     }
   }
 
@@ -155,7 +169,7 @@ export function LabSheet({ profile, rec, onClose, onSaved }: {
         <>
           <p className="note">Envie o laudo do laboratório (PDF ou até 6 fotos). O Yune lê os valores e você confere antes de salvar.</p>
           <input ref={input} type="file" hidden multiple accept="application/pdf,image/*"
-            onChange={(e) => { const fs = Array.from(e.target.files ?? []); consent.ask(() => onFiles(fs)); e.target.value = ""; }} />
+            onChange={(e) => { const fs = Array.from(e.target.files ?? []); pickFiles(fs); e.target.value = ""; }} />
           <button className="btn primary" onClick={() => input.current?.click()}>Enviar laudo</button>
           <button className="btn ghost" onClick={() => { setMsg(""); setStage("form"); }}>Digitar valores</button>
           {msg && <p className="note err">{msg}</p>}

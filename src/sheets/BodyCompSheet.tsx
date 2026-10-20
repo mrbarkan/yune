@@ -4,7 +4,7 @@ import { readHealthDoc, saveHealthDoc, type BodyComp, type BodyCompDraft, type B
 import { deleteHealthFile, FIELDS, parseValues, uploadHealthFile } from "@/lib/bodycomp";
 import { saveMeasurement } from "@/lib/measurements";
 import { localDay } from "@/lib/photos";
-import { useAiConsent } from "@/lib/useAiConsent";
+import { markAiConsentRequired, useAiConsent } from "@/lib/useAiConsent";
 
 const show = (n: number | null | undefined) => (n == null ? "" : String(n).replace(".", ","));
 const dayOf = (iso: string | undefined, tz: string) => {
@@ -47,12 +47,17 @@ export function BodyCompSheet({ profile, all, rec, onClose, onSaved }: {
     setMsg("");
     setStage("reading");
     let path: string | null = null;
+    let again = false;
     try {
       path = await uploadHealthFile(f);
       if (cancelled.current) throw new Error("");
       pending.current = path;
       const res = await readHealthDoc<BodyCompDraft>({ mode: "body_comp", paths: [path] });
       if (cancelled.current) throw new Error("");
+      if (res.consent === "required") {
+        again = true;
+        throw new Error("");
+      }
       if (res.error || !res.draft) throw new Error(res.error || "Não foi possível ler o documento agora.");
       const d = res.draft;
       setDevice(d.device ?? "");
@@ -64,8 +69,12 @@ export function BodyCompSheet({ profile, all, rec, onClose, onSaved }: {
       if (path) await deleteHealthFile(path).catch(() => {});
       pending.current = null;
       if (cancelled.current) return;
-      setMsg((e as Error).message || "Não foi possível enviar.");
       setStage("pick");
+      if (again) {
+        markAiConsentRequired(profile.id);
+        return consent.ask(() => onFile(f));
+      }
+      setMsg((e as Error).message || "Não foi possível enviar.");
     }
   }
 

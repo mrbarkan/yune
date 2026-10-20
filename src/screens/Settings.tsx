@@ -13,7 +13,7 @@ import {
 } from "@/lib/firebase";
 import { fmtLiters, fmtNum } from "@/lib/time";
 import { goalsValid } from "@/lib/profileDefaults";
-import { aiConsentOn, grantAiConsent, revokeAiConsent, useAiConsent } from "@/lib/useAiConsent";
+import { grantAiConsent, markAiConsentRequired, resetAiConsentSession, revokeAiConsent, useAiConsent, useAiConsentOn } from "@/lib/useAiConsent";
 import { PRO_OPEN, proStatus, proStatusLine } from "@/lib/pro";
 
 type DietProps = { allowed: boolean; plan: DietPlan | null; onOpen: () => void; onChanged: () => void };
@@ -173,7 +173,7 @@ export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }:
       <AccountSection />
 
       <section className="group">
-        <button className="btn ghost" disabled={leaving} onClick={async () => { setLeaving(true); try { await disablePushQuietly(); await signOut(auth); } finally { setLeaving(false); } }}>
+        <button className="btn ghost" disabled={leaving} onClick={async () => { setLeaving(true); try { await disablePushQuietly(); resetAiConsentSession(); await signOut(auth); } finally { setLeaving(false); } }}>
           {leaving ? "Saindo…" : "Sair"}
         </button>
         <button className="link" onClick={() => setAbout(true)}>Sobre o Yune</button>
@@ -308,11 +308,16 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals, onPro
     );
   }
 
-  async function run(body: Parameters<typeof importDietPlan>[0], uploaded?: string) {
+  async function run(body: Parameters<typeof importDietPlan>[0], retry: () => void, uploaded?: string) {
     const res = await importDietPlan(body);
-    if (res.error) {
+    if (res.error || res.consent) {
       if (uploaded) await deleteObject(ref(storage, uploaded)).catch(() => {});
-      setMsg({ kind: "err", text: res.error });
+      if (res.consent === "required") {
+        markAiConsentRequired(profile.id);
+        consent.ask(retry);
+        return;
+      }
+      setMsg({ kind: "err", text: res.error ?? "Não foi possível ler a dieta agora." });
       return;
     }
     setPaste(null);
@@ -326,6 +331,11 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals, onPro
     if (/\.doc$/i.test(f.name)) return setMsg({ kind: "err", text: "Arquivo .doc antigo: salve como PDF ou .docx e envie de novo." });
     const kind = fileType(f);
     if (!kind) return setMsg({ kind: "err", text: "Use PDF, Word (.docx), texto ou foto." });
+    consent.ask(() => send(f, kind));
+  }
+
+  async function send(f: File, kind: NonNullable<ReturnType<typeof fileType>>) {
+    setMsg(null);
     setBusy(true);
     try {
       // Foto: reduz mantendo o texto legível.
@@ -333,7 +343,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals, onPro
       if (blob.size > 10 * 1024 * 1024) throw new Error("Arquivo grande demais (máx. 10 MB).");
       const path = `diet-plans/${profile.id}/${crypto.randomUUID()}.${kind.ext}`;
       await uploadBytes(ref(storage, path), blob, { contentType: kind.type });
-      await run({ path, name: f.name }, path);
+      await run({ path, name: f.name }, () => send(f, kind), path);
     } catch (e) {
       setMsg({ kind: "err", text: (e as Error).message || "Não foi possível enviar." });
     } finally {
@@ -344,7 +354,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals, onPro
   async function fromText() {
     setBusy(true);
     setMsg(null);
-    await run({ text: paste ?? "" });
+    await run({ text: paste ?? "" }, fromText);
     setBusy(false);
   }
 
@@ -397,7 +407,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals, onPro
     <section className="group">
       <h2 className="section-title">Dieta <span className="pro-badge">Pro</span></h2>
       <input ref={input} type="file" hidden accept=".pdf,.docx,.txt,application/pdf,text/plain,image/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        onChange={(e) => { const f = e.target.files?.[0]; consent.ask(() => onFile(f)); e.target.value = ""; }} />
+        onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
 
       {plan ? (
         <>
@@ -450,35 +460,38 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals, onPro
 }
 
 function AiSection({ profile, onSaved }: { profile: Profile; onSaved: () => void }) {
-  const [on, setOn] = useState(aiConsentOn(profile));
+  const on = useAiConsentOn(profile);
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   async function change(v: boolean) {
     setErr("");
+    setBusy(true);
     try {
       await (v ? grantAiConsent(profile.id) : revokeAiConsent(profile.id));
-      setOn(v);
       onSaved();
     } catch {
       setErr("Não foi possível salvar agora. Tente de novo.");
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
     <section className="group">
       <h2 className="section-title">Leitura por IA</h2>
-      <Toggle label="Permitir que a IA leia o que eu enviar" on={on} onChange={change} />
+      <Toggle label="Permitir que a IA leia o que eu enviar" on={on} disabled={busy} onChange={change} />
       <p className="note">Textos, fotos de pratos e rótulos, dietas e exames vão para a Anthropic (EUA) só quando você envia.</p>
       {err && <p className="note err">{err}</p>}
     </section>
   );
 }
 
-function Toggle({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
+function Toggle({ label, on, onChange, disabled }: { label: string; on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <label className="toggle">
       <span>{label}</span>
-      <input type="checkbox" role="switch" checked={on} onChange={(e) => onChange(e.target.checked)} />
+      <input type="checkbox" role="switch" checked={on} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       <i aria-hidden />
     </label>
   );

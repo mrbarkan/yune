@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Segmented, Sheet } from "@/components/Sheet";
 import { COMMON, SUPPLEMENTS, TACO, fromHistory, fromServing, norm, nutrition, parseQuery, pickPortion, searchFoods, type Food, type Portion } from "@/lib/foods";
 import { compressImage } from "@/lib/image";
-import { useAiConsent } from "@/lib/useAiConsent";
+import { markAiConsentRequired, useAiConsent } from "@/lib/useAiConsent";
 import { dietWarnings, mealFor, optionKcal } from "@/lib/diet";
 import { addDoc, getDocs, limit, orderBy, query as q, updateDoc } from "firebase/firestore";
 import { PrivateImage } from "@/components/PrivateImage";
@@ -123,6 +123,10 @@ export function FoodSheet({ profile, plan, dietOn, meal, onClose, onSaved, onPro
       mode: "meal", description, image: image ? { data: image.base64, media_type: "image/jpeg" } : undefined,
     });
     setBusy("");
+    if (data.consent === "required") {
+      markAiConsentRequired(profile.id);
+      return consent.ask(() => estimate(description, image));
+    }
     if (data.error) return setErr(data.error);
     const items = (data.items ?? []) as FoodItem[];
     setNotes(items.length ? "" : data.notes);
@@ -151,6 +155,10 @@ export function FoodSheet({ profile, plan, dietOn, meal, onClose, onSaved, onPro
       const data = await estimateFood<Label>({
         mode: "label", description: query.trim(), image: { data: img.base64, media_type: "image/jpeg" },
       });
+      if (data.consent === "required") {
+        markAiConsentRequired(profile.id);
+        return consent.ask(() => onLabel(file));
+      }
       if (data.error) throw new Error(data.error);
       setLabel(data as Label);
     } catch (e) {

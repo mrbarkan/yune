@@ -8,3 +8,10 @@ export function hasAiConsent(p: Pick<Profile, "ai_consent">): boolean {
   const c = p.ai_consent;
   return !!c && typeof c.at === "string" && c.version >= AI_CONSENT_VERSION;
 }
+
+/** "Concordo": grava, executa a ação pendente e avisa o pai. Se gravar falhar, lança e a ação NÃO roda. */
+export async function grantAndRun(grant: () => Promise<void>, run: () => void, onGranted?: () => void): Promise<void> {
+  await grant();
+  run();
+  onGranted?.();
+}
