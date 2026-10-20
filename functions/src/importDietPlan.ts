@@ -5,6 +5,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { defineSecret } from "firebase-functions/params";
 import { onCall } from "firebase-functions/v2/https";
+import { AI_CONSENT_ERROR, checkAiConsent } from "./consent.js";
 import { clipPlan } from "./dietClip.js";
 import { replaceDiets } from "./dietReplace.js";
 import { fileContent } from "./files.js";
@@ -146,6 +147,7 @@ export const importDietPlan = onCall(
   async (req) => {
     if (!req.auth || req.auth.token.email_verified !== true) return { error: "Faça login para continuar." };
     const uid = req.auth.uid;
+    if (!(await checkAiConsent(uid))) return { error: AI_CONSENT_ERROR, consent: "required" };
     if (!(await isPro(uid))) return { error: "A dieta do nutricionista é um recurso Pro." };
 
     const body = (req.data ?? {}) as Record<string, unknown>;

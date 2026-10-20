@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Segmented, Sheet } from "@/components/Sheet";
 import { COMMON, SUPPLEMENTS, TACO, fromHistory, fromServing, norm, nutrition, parseQuery, pickPortion, searchFoods, type Food, type Portion } from "@/lib/foods";
 import { compressImage } from "@/lib/image";
+import { useAiConsent } from "@/lib/useAiConsent";
 import { dietWarnings, mealFor, optionKcal } from "@/lib/diet";
 import { addDoc, getDocs, limit, orderBy, query as q, updateDoc } from "firebase/firestore";
 import { PrivateImage } from "@/components/PrivateImage";
@@ -53,13 +54,15 @@ function fromAiItem(it: FoodItem): Food {
 }
 
 /** Nova refeição, ou a refeição `meal` já salva para corrigir. */
-export function FoodSheet({ profile, plan, dietOn, meal, onClose, onSaved }: {
+export function FoodSheet({ profile, plan, dietOn, meal, onClose, onSaved, onProfile }: {
   profile: Profile;
   plan: DietPlan | null;
   dietOn: boolean;
   meal?: Meal;
   onClose: () => void;
   onSaved: () => void;
+  /** Recarrega o perfil (depois de autorizar a IA). */
+  onProfile?: () => void;
 }) {
   const [at, setAt] = useState(() => toLocalInput(meal ? new Date(meal.eaten_at) : new Date()));
   const [place, setPlace] = useState<Place>(() => meal?.place ?? lastPlace());
@@ -110,6 +113,8 @@ export function FoodSheet({ profile, plan, dietOn, meal, onClose, onSaved }: {
     setQuery("");
     navigator.vibrate?.(6);
   };
+
+  const consent = useAiConsent(profile, onProfile);
 
   async function estimate(description: string, image?: Photo | null) {
     setBusy("ai");
@@ -248,13 +253,13 @@ export function FoodSheet({ profile, plan, dietOn, meal, onClose, onSaved }: {
           onKeyDown={(e) => {
             if (e.key !== "Enter" || busy) return;
             if (results.length) addResult(results[0]);
-            else if (query.trim().length > 2) estimate(query.trim());
+            else if (query.trim().length > 2) consent.ask(() => estimate(query.trim()));
           }} />
         <button className="cam" onClick={() => photoInput.current?.click()} aria-label="Foto do prato" disabled={!!busy}>
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" /><circle cx="12" cy="13.5" r="3.6" /></svg>
         </button>
-        <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { onPhoto(e.target.files?.[0]); e.target.value = ""; }} />
-        <input ref={labelInput} type="file" accept="image/*" hidden onChange={(e) => { onLabel(e.target.files?.[0]); e.target.value = ""; }} />
+        <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; consent.ask(() => onPhoto(f)); e.target.value = ""; }} />
+        <input ref={labelInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; consent.ask(() => onLabel(f)); e.target.value = ""; }} />
       </div>
 
       {busy === "ai" && <p className="thinking"><span className="pulse">Olhando o prato</span></p>}
@@ -280,7 +285,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, onClose, onSaved }: {
           })}
           {query.trim().length > 2 && (
             <li className="ai-row">
-              <button onClick={() => estimate(query.trim())} disabled={!!busy}>
+              <button onClick={() => consent.ask(() => estimate(query.trim()))} disabled={!!busy}>
                 <span><b>Calcular “{query.trim().length > 40 ? query.trim().slice(0, 38) + "…" : query.trim()}”</b><small>estimativa automática, item por item</small></span><em>✦</em>
               </button>
             </li>
@@ -409,6 +414,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, onClose, onSaved }: {
           </button>
         </div>
       )}
+      {consent.sheet}
     </Sheet>
   );
 }

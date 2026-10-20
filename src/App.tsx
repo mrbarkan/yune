@@ -129,11 +129,11 @@ function Shell({ userId }: { userId: string }) {
           </div>
         </div>
       )}
-      {sheet === "food" && <FoodSheet profile={profile} plan={plan} dietOn={dietAllowed} onClose={close} onSaved={saved} />}
+      {sheet === "food" && <FoodSheet profile={profile} plan={plan} dietOn={dietAllowed} onClose={close} onSaved={saved} onProfile={reload} />}
       {sheet === "move" && <MoveSheet profile={profile} onClose={close} onSaved={saved} />}
       {sheet === "water" && <WaterSheet profile={profile} onClose={close} onSaved={bump} onProfile={reload} />}
       {sheet === "sleep" && <SleepSheet onClose={close} onSaved={saved} />}
-      {edit?.kind === "food" && <FoodSheet profile={profile} plan={plan} dietOn={dietAllowed} meal={edit.rec} onClose={close} onSaved={saved} />}
+      {edit?.kind === "food" && <FoodSheet profile={profile} plan={plan} dietOn={dietAllowed} meal={edit.rec} onClose={close} onSaved={saved} onProfile={reload} />}
       {edit?.kind === "move" && <MoveSheet profile={profile} activity={edit.rec} onClose={close} onSaved={saved} />}
       {edit?.kind === "water" && <WaterSheet profile={profile} water={edit.rec} onClose={close} onSaved={saved} onProfile={reload} />}
       {edit?.kind === "sleep" && <SleepSheet sleep={edit.rec} onClose={close} onSaved={saved} />}

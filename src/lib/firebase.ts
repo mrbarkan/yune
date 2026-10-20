@@ -82,6 +82,8 @@ export type Profile = {
   water_sizes?: number[];
   /** Caminho da foto de perfil no Storage. */
   photo_path?: string | null;
+  /** Autorização para enviar dados à IA (Anthropic); ausente/null = não autorizou. */
+  ai_consent?: { at: string; version: number } | null;
 };
 
 export type Measurement = {

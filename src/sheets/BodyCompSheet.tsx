@@ -4,6 +4,7 @@ import { readHealthDoc, saveHealthDoc, type BodyComp, type BodyCompDraft, type B
 import { deleteHealthFile, FIELDS, parseValues, uploadHealthFile } from "@/lib/bodycomp";
 import { saveMeasurement } from "@/lib/measurements";
 import { localDay } from "@/lib/photos";
+import { useAiConsent } from "@/lib/useAiConsent";
 
 const show = (n: number | null | undefined) => (n == null ? "" : String(n).replace(".", ","));
 const dayOf = (iso: string | undefined, tz: string) => {
@@ -38,6 +39,8 @@ export function BodyCompSheet({ profile, all, rec, onClose, onSaved }: {
     pending.current = null;
     onClose();
   }, [saving, onClose]);
+
+  const consent = useAiConsent(profile);
 
   async function onFile(f?: File) {
     if (!f) return;
@@ -107,7 +110,7 @@ export function BodyCompSheet({ profile, all, rec, onClose, onSaved }: {
         <>
           <p className="note">Envie o laudo da bioimpedância (foto ou PDF). O Yune lê os valores e você confere antes de salvar.</p>
           <input ref={input} type="file" hidden accept="application/pdf,image/*"
-            onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
+            onChange={(e) => { const f = e.target.files?.[0]; consent.ask(() => onFile(f)); e.target.value = ""; }} />
           <button className="btn primary" onClick={() => input.current?.click()}>Enviar laudo</button>
           <button className="btn ghost" onClick={() => { setMsg(""); setStage("form"); }}>Digitar valores</button>
           {msg && <p className="note err">{msg}</p>}
@@ -139,6 +142,7 @@ export function BodyCompSheet({ profile, all, rec, onClose, onSaved }: {
           <p className="note small">Compare sempre no mesmo aparelho e nas mesmas condições (jejum, hidratação).</p>
         </>
       )}
+      {consent.sheet}
     </Sheet>
   );
 }

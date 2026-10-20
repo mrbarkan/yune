@@ -6,6 +6,7 @@ import { collectedAtFor } from "@/lib/labreports";
 import { LAB_CATALOG } from "@/lib/labs";
 import { parseDecimal } from "@/lib/num";
 import { localDay } from "@/lib/photos";
+import { useAiConsent } from "@/lib/useAiConsent";
 
 const show = (n: number | null | undefined) => (n == null ? "" : String(n).replace(".", ","));
 const dayOf = (iso: string | undefined, tz: string) => {
@@ -73,6 +74,8 @@ export function LabSheet({ profile, rec, onClose, onSaved }: {
     dropPending();
     onClose();
   }, [saving, onClose, dropPending]);
+
+  const consent = useAiConsent(profile);
 
   async function onFiles(files: File[]) {
     if (!files.length) return;
@@ -152,7 +155,7 @@ export function LabSheet({ profile, rec, onClose, onSaved }: {
         <>
           <p className="note">Envie o laudo do laboratório (PDF ou até 6 fotos). O Yune lê os valores e você confere antes de salvar.</p>
           <input ref={input} type="file" hidden multiple accept="application/pdf,image/*"
-            onChange={(e) => { onFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
+            onChange={(e) => { const fs = Array.from(e.target.files ?? []); consent.ask(() => onFiles(fs)); e.target.value = ""; }} />
           <button className="btn primary" onClick={() => input.current?.click()}>Enviar laudo</button>
           <button className="btn ghost" onClick={() => { setMsg(""); setStage("form"); }}>Digitar valores</button>
           {msg && <p className="note err">{msg}</p>}
@@ -199,6 +202,7 @@ export function LabSheet({ profile, rec, onClose, onSaved }: {
           <button className="btn primary" disabled={saving} onClick={save}>{saving ? "Salvando…" : "Salvar"}</button>
         </>
       )}
+      {consent.sheet}
     </Sheet>
   );
 }

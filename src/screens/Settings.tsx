@@ -12,6 +12,7 @@ import {
 } from "@/lib/firebase";
 import { fmtLiters, fmtNum } from "@/lib/time";
 import { goalsValid } from "@/lib/profileDefaults";
+import { aiConsentOn, grantAiConsent, revokeAiConsent, useAiConsent } from "@/lib/useAiConsent";
 import { PRO_OPEN, proStatus, proStatusLine } from "@/lib/pro";
 
 type DietProps = { allowed: boolean; plan: DietPlan | null; onOpen: () => void; onChanged: () => void };
@@ -107,11 +108,13 @@ export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }:
 
       <ProSection ent={ent} tz={p.timezone} onPro={onPro} />
 
-      <DietSection {...diet} profile={p} onGoals={async (goals) => {
+      <DietSection {...diet} profile={p} onProfile={onSaved} onGoals={async (goals) => {
         const next = { ...p, ...goals };
         setP(next);
         await updateDoc(profileDoc(next.id), { kcal_goal: next.kcal_goal, water_goal_ml: next.water_goal_ml }).then(onSaved, () => setMsg("Confira os valores e tente de novo."));
       }} />
+
+      <AiSection profile={p} onSaved={onSaved} />
 
       <section className="group">
         <h2 className="section-title">Notificações</h2>
@@ -258,8 +261,9 @@ function fileType(f: File) {
   return null;
 }
 
-function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: DietProps & {
+function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals, onProfile }: DietProps & {
   profile: Profile;
+  onProfile: () => void;
   onGoals: (g: Pick<Profile, "kcal_goal" | "water_goal_ml">) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
@@ -267,6 +271,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
   const [paste, setPaste] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const consent = useAiConsent(profile, onProfile);
 
   if (!allowed && !plan) {
     return (
@@ -366,7 +371,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
     <section className="group">
       <h2 className="section-title">Dieta <span className="pro-badge">Pro</span></h2>
       <input ref={input} type="file" hidden accept=".pdf,.docx,.txt,application/pdf,text/plain,image/*,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        onChange={(e) => { onFile(e.target.files?.[0]); e.target.value = ""; }} />
+        onChange={(e) => { const f = e.target.files?.[0]; consent.ask(() => onFile(f)); e.target.value = ""; }} />
 
       {plan ? (
         <>
@@ -392,7 +397,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
             <textarea rows={8} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Cole aqui a dieta como recebeu" /></label>
           <div className="row">
             <button className="btn ghost" onClick={() => setPaste(null)}>Cancelar</button>
-            <button className="btn primary" disabled={paste.trim().length < 20} onClick={fromText}>Ler dieta</button>
+            <button className="btn primary" disabled={paste.trim().length < 20} onClick={() => consent.ask(fromText)}>Ler dieta</button>
           </div>
         </>
       ) : (
@@ -413,6 +418,32 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
         <button className="link" onClick={() => setConfirm(true)}>Remover dieta</button>
       ))}
       {msg && <p className={`note ${msg.kind}`}>{msg.text}</p>}
+      {consent.sheet}
+    </section>
+  );
+}
+
+function AiSection({ profile, onSaved }: { profile: Profile; onSaved: () => void }) {
+  const [on, setOn] = useState(aiConsentOn(profile));
+  const [err, setErr] = useState("");
+
+  async function change(v: boolean) {
+    setErr("");
+    try {
+      await (v ? grantAiConsent(profile.id) : revokeAiConsent(profile.id));
+      setOn(v);
+      onSaved();
+    } catch {
+      setErr("Não foi possível salvar agora. Tente de novo.");
+    }
+  }
+
+  return (
+    <section className="group">
+      <h2 className="section-title">Leitura por IA</h2>
+      <Toggle label="Permitir que a IA leia o que eu enviar" on={on} onChange={change} />
+      <p className="note">Textos, fotos de pratos e rótulos, dietas e exames vão para a Anthropic (EUA) só quando você envia.</p>
+      {err && <p className="note err">{err}</p>}
     </section>
   );
 }

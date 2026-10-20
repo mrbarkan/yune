@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getFirestore } from "firebase-admin/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { onCall } from "firebase-functions/v2/https";
+import { AI_CONSENT_ERROR, checkAiConsent } from "./consent.js";
 import { fileContent } from "./files.js";
 import {
   BODY_COMP_SCHEMA, LABS_SCHEMA, canSave, cleanBodyComp, cleanLabReport, toBodyCompDraft, toLabsDraft, validateBodyComp, validateLabReport,
@@ -51,6 +52,7 @@ export const readHealthDoc = onCall(
   async (req) => {
     if (!req.auth || req.auth.token.email_verified !== true) return { error: "Faça login para continuar." };
     const uid = req.auth.uid;
+    if (!(await checkAiConsent(uid))) return { error: AI_CONSENT_ERROR, consent: "required" };
     const body = obj(req.data) ?? {};
     const mode = body.mode as Mode;
     const list = paths(body.paths);

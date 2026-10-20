@@ -36,6 +36,21 @@ describe("regras: perfil", () => {
   });
 });
 
+describe("regras: ai_consent no perfil", () => {
+  const ok = { at: NOW, version: 1 };
+  it("aceita consentimento válido, null e ausente", async () => {
+    await assertSucceeds(setDoc(doc(alice(), "users/alice"), profile({ ai_consent: ok })));
+    await assertSucceeds(setDoc(doc(alice(), "users/alice"), profile({ ai_consent: null })));
+    await assertSucceeds(setDoc(doc(alice(), "users/alice"), profile()));
+  });
+  it("nega chave extra, data fora do ISO e versão inválida", async () => {
+    await assertFails(setDoc(doc(alice(), "users/alice"), profile({ ai_consent: { ...ok, extra: 1 } })));
+    await assertFails(setDoc(doc(alice(), "users/alice"), profile({ ai_consent: { at: "ontem", version: 1 } })));
+    await assertFails(setDoc(doc(alice(), "users/alice"), profile({ ai_consent: { at: NOW, version: "1" } })));
+    await assertFails(setDoc(doc(alice(), "users/alice"), profile({ ai_consent: { at: NOW, version: 0 } })));
+  });
+});
+
 describe("regras: measurements", () => {
   it("cria válida, rejeita faixa, chave extra e created_at ausente", async () => {
     await assertSucceeds(setDoc(doc(alice(), "users/alice/measurements/m1"), measurement()));

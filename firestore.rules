@@ -16,7 +16,7 @@ service cloud.firestore {
 
     function validProfile(uid) {
       return d().keys().hasOnly(['name', 'sex', 'birth_year', 'height_cm', 'weight_kg', 'kcal_goal', 'water_goal_ml', 'sleep_goal_min', 'timezone',
-          'water_sizes', 'photo_path'])
+          'water_sizes', 'photo_path', 'ai_consent'])
         && (d().get('name', null) == null || text(d().name, 0, 80))
         && d().get('sex', null) in [null, 'f', 'm']
         && optNum(d().get('birth_year', null), 1900, 2100)
@@ -27,7 +27,9 @@ service cloud.firestore {
         && num(d().sleep_goal_min, 180, 720)
         && text(d().timezone, 1, 64)
         && (d().get('water_sizes', null) == null || validWaterSizes(d().water_sizes))
-        && (d().get('photo_path', null) == null || d().photo_path.matches('^profile-photos/' + uid + '/[^/]+$'));
+        && (d().get('photo_path', null) == null || d().photo_path.matches('^profile-photos/' + uid + '/[^/]+$'))
+        && (d().get('ai_consent', null) == null || (d().ai_consent.keys().hasOnly(['at', 'version']) && iso(d().ai_consent.at)
+          && d().ai_consent.version is int && num(d().ai_consent.version, 1, 100)));
     }
 
     // Os quatro botões de água da folha Água (ml).

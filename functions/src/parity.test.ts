@@ -22,6 +22,15 @@ describe("paridade app x funções", () => {
     expect(app![1]).toBe(fn![1]);
   });
 
+  it("AI_CONSENT_VERSION igual no app e nas funções", () => {
+    const re = /AI_CONSENT_VERSION = (\d+);/;
+    const app = re.exec(read("../../src/lib/consent.ts"));
+    const fn = re.exec(read("./consent.ts"));
+    expect(app).not.toBeNull();
+    expect(fn).not.toBeNull();
+    expect(app![1]).toBe(fn![1]);
+  });
+
   it("parseDecimal do servidor é cópia exata do app", () => {
     expect(fnSource(read("./healthDoc.ts"), "parseDecimal")).toBe(fnSource(read("../../src/lib/num.ts"), "parseDecimal"));
   });
