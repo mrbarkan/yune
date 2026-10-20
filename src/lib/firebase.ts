@@ -118,6 +118,34 @@ export type LabReport = {
   file_paths: string[]; ai: boolean; created_at: string;
 };
 
+type HealthMode = "body_comp" | "labs";
+export type BodyCompDraft = Omit<BodyComp, "id" | "file_path" | "ai" | "created_at">;
+export type LabsDraft = Omit<LabReport, "id" | "file_paths" | "ai" | "created_at">;
+
+/** Lê o laudo enviado (foto ou PDF) e devolve um rascunho para a pessoa conferir. */
+export async function readHealthDoc<T extends BodyCompDraft | LabsDraft>(
+  body: { mode: HealthMode; paths: string[] },
+): Promise<{ draft?: T; error?: string }> {
+  try {
+    const res = await httpsCallable(functions, "readHealthDoc", { timeout: 120_000 })(body);
+    return res.data as { draft?: T; error?: string };
+  } catch {
+    return { error: "Não foi possível ler o documento agora." };
+  }
+}
+
+/** Grava os valores confirmados (cria, ou atualiza se vier `id`). Só o servidor escreve nessas coleções. */
+export async function saveHealthDoc(
+  body: { mode: HealthMode; id?: string; data: BodyCompDraft | LabsDraft; paths: string[]; ai: boolean },
+): Promise<{ id?: string; error?: string }> {
+  try {
+    const res = await httpsCallable(functions, "saveHealthDoc")(body);
+    return res.data as { id?: string; error?: string };
+  } catch {
+    return { error: "Não foi possível salvar agora." };
+  }
+}
+
 export type Pose = "frente" | "lado" | "costas";
 
 export type BodyPhoto = { id: string; taken_at: string; pose: Pose; path: string; created_at?: string };
