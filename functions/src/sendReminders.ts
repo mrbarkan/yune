@@ -5,7 +5,7 @@ import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import webpush from "web-push";
-import { processUser, type Profile, type Reminders } from "./reminderStep.js";
+import { runAll, type Profile, type Reminders } from "./reminderStep.js";
 import { localNow } from "./reminderTime.js";
 import { REGION } from "./region.js";
 
@@ -38,15 +38,14 @@ export const sendReminders = onSchedule(
     webpush.setVapidDetails(VAPID_SUBJECT.value() || "mailto:yune@example.com", VAPID_PUBLIC_KEY.value(), VAPID_PRIVATE_KEY.value());
     const db = getFirestore();
     const now = new Date();
-    let sent = 0;
-    let failed = 0;
 
     const reminders = await db.collection("reminders").get();
-    for (const doc of reminders.docs) {
-      const uid = doc.id;
-      const user = db.collection("users").doc(uid);
-      try {
-        sent += await processUser(uid, doc.data() as Reminders, {
+    const byId = new Map(reminders.docs.map((doc) => [doc.id, doc]));
+    const { sent, failed } = await runAll(
+      reminders.docs.map((doc) => ({ id: doc.id, data: doc.data() as Reminders })),
+      (uid) => {
+        const user = db.collection("users").doc(uid);
+        return {
           now,
           subs: async () => (await user.collection("push_subscriptions").get()).docs.map((s) => ({
             endpoint: s.get("endpoint"), p256dh: s.get("p256dh"), auth: s.get("auth"),
@@ -58,7 +57,7 @@ export const sendReminders = onSchedule(
           },
           totals: (u, tz, day) => dailyTotals(db, u, tz, day),
           hasWaterSince: async (_u, since) => !(await user.collection("water").where("drank_at", ">=", since).limit(1).get()).empty,
-          patch: async (_u, patch) => { await doc.ref.update(patch); },
+          patch: async (_u, patch) => { await byId.get(uid)!.ref.update(patch); },
           push: async (sub, payload) => {
             await webpush.sendNotification(
               { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
@@ -66,12 +65,9 @@ export const sendReminders = onSchedule(
               { TTL: 60 * 60, timeout: 10_000 },
             );
           },
-        });
-      } catch (err) {
-        failed++;
-        console.error("send-reminders: falha", uid, err instanceof Error ? err.name : "erro");
-      }
-    }
+        };
+      },
+    );
 
     console.log(`send-reminders: ${sent} notificações, ${failed} falhas`);
   },

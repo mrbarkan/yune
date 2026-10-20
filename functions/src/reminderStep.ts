@@ -52,7 +52,7 @@ export async function processUser(uid: string, r: Reminders, d: Deps): Promise<n
   const profile = await d.profile(uid);
   if (!profile) return 0;
   const tz = safeTimeZone(profile.timezone);
-  const local = localNow(tz);
+  const local = localNow(tz, d.now);
   let sent = 0;
 
   async function send(payload: Payload) {
@@ -104,4 +104,21 @@ export async function processUser(uid: string, r: Reminders, d: Deps): Promise<n
     }
   }
   return sent;
+}
+
+/** Roda todas as pessoas; o erro de uma não interrompe as outras. */
+export async function runAll(
+  docs: { id: string; data: Reminders }[],
+  makeDeps: (uid: string) => Deps,
+): Promise<{ sent: number; failed: number }> {
+  let sent = 0, failed = 0;
+  for (const { id, data } of docs) {
+    try {
+      sent += await processUser(id, data, makeDeps(id));
+    } catch (err) {
+      failed++;
+      console.error("send-reminders: falha", id, err instanceof Error ? err.name : "erro");
+    }
+  }
+  return { sent, failed };
 }
