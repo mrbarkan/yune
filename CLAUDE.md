@@ -51,7 +51,7 @@ PWA de diário de saúde (comida, movimento, água, sono). Todo texto de interfa
 - Beta: `npm --prefix functions run grant-beta -- --days 30 --apply [--project <id>]` grava `beta_until` de todos (pula quem já tem beta mais longo;
   mantém `stripe`). `--apply` é obrigatório para gravar; sem ele é só simulação (dry-run). `--days` de 1 a 90. Fora do emulador exige `--project`.
   Encerrar o beta = rodar o grant-beta (para dar o prazo final) e, num mesmo release, pôr `PRO_OPEN = false` em `src/lib/pro.ts` e `functions/src/pro.ts`.
-- Apagar conta (`deleteAccount`, callable com `STRIPE_SECRET_KEY`): exige `confirm: "APAGAR"` e login recente (`auth_time` até 10 min; o app reautentica logo antes, o servidor decide).
+- Apagar conta (`deleteAccount`, callable com `STRIPE_SECRET_KEY`): exige `confirm: "APAGAR"` e login recente (`auth_time` até 10 min; senha: o app reautentica logo antes; Google/Apple: login recente ou popup; o servidor decide).
   Ordem: apaga o customer na Stripe (cancela as assinaturas na hora; se falhar, nada mais é apagado), depois arquivos em `STORAGE_PREFIXES` (`meal-photos`, `profile-photos`, `body-photos`, `health-docs`, `diet-plans`
   com `/{uid}/`), `users/{uid}` (recursivo), `reminders`, `entitlements`, `billing`, `ai_usage` e por fim o usuário do Auth. No modo de cobrança simulada o `deleteCustomer` é no-op.
   Depois de apagar, o webhook registra "customer sem uid" nos eventos `subscription.deleted` do customer removido: esperado.

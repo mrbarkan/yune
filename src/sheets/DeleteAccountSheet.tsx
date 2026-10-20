@@ -6,6 +6,7 @@ import { Sheet } from "@/components/Sheet";
 import { auth, deleteAccount } from "@/lib/firebase";
 import { disablePushQuietly } from "@/lib/push";
 
+const GONE = "gone";
 const REAUTH_FAIL = "Não foi possível confirmar. Saia, entre de novo e volte aqui em até 10 minutos.";
 
 const REAUTH_SECONDS = 600;
@@ -66,9 +67,18 @@ export function DeleteAccountSheet({ onClose }: { onClose: () => void }) {
       return null;
     } catch (e) {
       const c = (e as { code?: string }).code;
+      // A conta já foi apagada (por exemplo, a resposta anterior se perdeu): não há o que confirmar.
+      if (c === "auth/user-not-found" || c === "auth/user-token-expired") return GONE;
       if (method === "password" && (c === "auth/wrong-password" || c === "auth/invalid-credential")) return "Senha incorreta.";
       return method === "password" ? "Não foi possível confirmar a senha agora. Tente de novo." : REAUTH_FAIL;
     }
+  }
+
+  async function finish() {
+    try { await disablePushQuietly(); } catch { /* o documento já pode ter sumido */ }
+    showDeletedNotice();
+    // A conta já não existe: se o signOut falhar, recarregar também sai da sessão.
+    await signOut(auth).catch(() => location.reload());
   }
 
   async function confirmProvider() {
@@ -76,7 +86,8 @@ export function DeleteAccountSheet({ onClose }: { onClose: () => void }) {
     setErr("");
     try {
       const bad = await reauth();
-      if (bad) setErr(bad);
+      if (bad === GONE) await finish();
+      else if (bad) setErr(bad);
       else setConfirmed(true);
     } finally {
       setBusy(false);
@@ -89,14 +100,12 @@ export function DeleteAccountSheet({ onClose }: { onClose: () => void }) {
     try {
       if (method === "password") {
         const bad = await reauth();
+        if (bad === GONE) { await finish(); return; }
         if (bad) { setErr(bad); return; }
       }
       const res = await deleteAccount();
       if (res.ok) {
-        try { await disablePushQuietly(); } catch { /* o documento já pode ter sumido */ }
-        showDeletedNotice();
-        // A conta já não existe: se o signOut falhar, recarregar também sai da sessão.
-        await signOut(auth).catch(() => location.reload());
+        await finish();
         return;
       }
       if (res.reauth) setConfirmed(false);

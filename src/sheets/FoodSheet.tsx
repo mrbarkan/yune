@@ -135,12 +135,14 @@ export function FoodSheet({ profile, plan, dietOn, meal, onClose, onSaved, onPro
     setQuery("");
   }
 
+  // A foto fica na refeição mesmo sem a IA; só a estimativa pede consentimento.
   async function onPhoto(file?: File) {
     if (!file) return;
     try {
       const img = await compressImage(file);
       setPhoto(img);
-      await estimate(query.trim(), img);
+      const description = query.trim();
+      consent.ask(() => estimate(description, img));
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -266,7 +268,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, onClose, onSaved, onPro
         <button className="cam" onClick={() => photoInput.current?.click()} aria-label="Foto do prato" disabled={!!busy}>
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" /><circle cx="12" cy="13.5" r="3.6" /></svg>
         </button>
-        <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; consent.ask(() => onPhoto(f)); e.target.value = ""; }} />
+        <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { onPhoto(e.target.files?.[0]); e.target.value = ""; }} />
         <input ref={labelInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; consent.ask(() => onLabel(f)); e.target.value = ""; }} />
       </div>
 

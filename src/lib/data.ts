@@ -105,7 +105,9 @@ export function useProfile(userId: string | undefined) {
     const snap = await getDoc(ref);
     let p: Profile;
     if (!snap.exists()) {
-      // Primeiro acesso: cria perfil e lembretes com os valores padrão.
+      // Primeiro acesso: cria perfil e lembretes com os valores padrão. Antes, renova o token: se a conta foi apagada
+      // (em outro aparelho), a renovação falha e o SDK sai da sessão, em vez de recriar dados de uma conta que não existe.
+      await auth.currentUser?.getIdToken(true);
       p = { id: userId, ...DEFAULT_PROFILE, name: auth.currentUser?.displayName || null, timezone: tz };
       const { id: _, ...data } = p;
       await setDoc(ref, data);
