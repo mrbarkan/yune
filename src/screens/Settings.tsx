@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AboutSheet } from "@/sheets/AboutSheet";
 import { suggestedGoal } from "@/lib/activity";
-import { disablePush, enablePush, isIOS, pushState, type PushState } from "@/lib/push";
+import { disablePush, disablePushQuietly, enablePush, isIOS, pushState, type PushState } from "@/lib/push";
 import { signOut } from "firebase/auth";
-import { deleteDoc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { deleteDoc, getDoc, getDocs, setDoc, updateDoc } from "firebase/firestore";
 import { deleteObject, ref, uploadBytes } from "firebase/storage";
+import { deleteHealthFile } from "@/lib/bodycomp";
 import { compressImage } from "@/lib/image";
 import {
-  auth, createPortal, DEFAULT_REMINDERS, importDietPlan, profileDoc, remindersDoc, row, storage, type DietPlan, type Entitlements, type Profile, type Reminders,
+  auth, createPortal, DEFAULT_REMINDERS, importDietPlan, profileDoc, remindersDoc, row, rows, storage, table, type DietPlan, type Entitlements, type Profile, type Reminders,
 } from "@/lib/firebase";
 import { fmtLiters, fmtNum } from "@/lib/time";
 import { PRO_OPEN, proStatus, proStatusLine } from "@/lib/pro";
@@ -21,12 +22,15 @@ export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }:
   const [r, setR] = useState<Reminders | null>(null);
   const [push, setPush] = useState<PushState>("off");
   const [msg, setMsg] = useState("");
+  const [remErr, setRemErr] = useState("");
+  const [leaving, setLeaving] = useState(false);
   const [about, setAbout] = useState(false);
   const closeAbout = useCallback(() => setAbout(false), []);
   const suggestion = suggestedGoal(p);
 
   useEffect(() => {
-    getDoc(remindersDoc(profile.id)).then((snap) => setR({ ...DEFAULT_REMINDERS, ...snap.data(), user_id: profile.id }));
+    getDoc(remindersDoc(profile.id)).then((snap) => setR({ ...DEFAULT_REMINDERS, ...snap.data(), user_id: profile.id }))
+      .catch(() => setRemErr("Não foi possível carregar os lembretes."));
     pushState().then(setPush).catch(() => setPush("unsupported"));
   }, [profile.id]);
 
@@ -44,10 +48,17 @@ export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }:
   }
 
   async function saveReminders(next: Reminders) {
+    const prev = r;
     setR(next);
     // Só as preferências: os campos last_* são do servidor (send-reminders).
     const prefs = Object.fromEntries(Object.keys(DEFAULT_REMINDERS).map((k) => [k, next[k as keyof Reminders]]));
-    await setDoc(remindersDoc(next.user_id), prefs, { merge: true });
+    try {
+      await setDoc(remindersDoc(next.user_id), prefs, { merge: true });
+      setRemErr("");
+    } catch {
+      setR(prev);
+      setRemErr("Não foi possível salvar o lembrete.");
+    }
   }
 
   async function togglePush() {
@@ -116,6 +127,7 @@ export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }:
           <Toggle label="Receber notificações neste aparelho" on={push === "on"} onChange={togglePush} />
         )}
 
+        {remErr && <p className="note err">{remErr}</p>}
         {r && (
           <div className="reminders">
             <Toggle label="Lembrar de beber água" on={r.water_enabled} onChange={(v) => saveReminders({ ...r, water_enabled: v })} />
@@ -148,7 +160,9 @@ export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }:
       <ExportSection profile={p} />
 
       <section className="group">
-        <button className="btn ghost" onClick={() => signOut(auth)}>Sair</button>
+        <button className="btn ghost" disabled={leaving} onClick={async () => { setLeaving(true); await disablePushQuietly(); await signOut(auth); }}>
+          {leaving ? "Saindo…" : "Sair"}
+        </button>
         <button className="link" onClick={() => setAbout(true)}>Sobre o Yune</button>
         <p className="colophon">Yune · estimativas de calorias são aproximadas e não substituem orientação profissional.</p>
       </section>
@@ -180,7 +194,7 @@ function ProSection({ ent, tz, onPro }: { ent: Entitlements; tz: string; onPro: 
       <h2 className="section-title">Yune Pro</h2>
       {PRO_OPEN && <p className="note">Durante o beta, o Pro está liberado para todos.</p>}
       {line && <p className={st.status === "past_due" ? "note err" : "note"}>{line}</p>}
-      {st.status === "none" && <button className="btn ghost" onClick={onPro}>Conhecer o Pro</button>}
+      {(st.status === "none" || st.status === "beta") && <button className="btn ghost" onClick={onPro}>Conhecer o Pro</button>}
       {ent.stripe && <button className="btn ghost" disabled={busy} onClick={manage}>{busy ? "Abrindo…" : "Gerenciar assinatura"}</button>}
       {err && <p className="note err">{err}</p>}
     </section>
@@ -202,7 +216,8 @@ function ExportSection({ profile }: { profile: Profile }) {
       const name = exportFileName(new Date(), profile.timezone);
       if (kind === "xlsx") await downloadXlsx(tables, name);
       else await downloadPdf(tables, data.profile, name);
-    } catch {
+    } catch (e) {
+      console.error("export", e);
       setErr("Não foi possível exportar agora. Tente de novo.");
     } finally {
       setBusy(null);
@@ -295,12 +310,17 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
   }
 
   async function remove() {
-    if (!plan) return;
-    await deleteDoc(row("diet_plans", plan.id));
-    if (plan.file_path) await deleteObject(ref(storage, plan.file_path)).catch(() => {});
-    setConfirm(false);
-    setMsg(null);
-    onChanged();
+    try {
+      for (const x of rows<DietPlan>(await getDocs(table("diet_plans")))) {
+        if (x.file_path) await deleteHealthFile(x.file_path);
+        await deleteDoc(row("diet_plans", x.id));
+      }
+      setConfirm(false);
+      setMsg(null);
+      onChanged();
+    } catch {
+      setMsg({ kind: "err", text: "Não foi possível apagar a dieta. Tente de novo." });
+    }
   }
 
   const t = plan?.targets;
@@ -322,6 +342,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
         <p className="note">Seu plano continua aqui. Para enviar uma nova dieta, assine o Pro.</p>
         {confirm ? (
           <div className="row">
+            <p className="note">Apaga também as dietas anteriores guardadas.</p>
             <button className="btn ghost" onClick={() => setConfirm(false)}>Manter</button>
             <button className="btn danger" onClick={remove}>Apagar dieta</button>
           </div>
@@ -374,6 +395,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
 
       {plan && !busy && (confirm ? (
         <div className="row">
+          <p className="note">Apaga também as dietas anteriores guardadas.</p>
           <button className="btn ghost" onClick={() => setConfirm(false)}>Manter</button>
           <button className="btn danger" onClick={remove}>Apagar dieta</button>
         </div>

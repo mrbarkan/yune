@@ -93,4 +93,22 @@ describe("pdfText", () => {
     expect(pdfText(null)).toBe("");
     expect(pdfText(12.5)).toBe("12.5");
   });
+
+  it("doc antigo sem data não quebra a exportação", () => {
+    const t = exportTables({
+      ...empty,
+      meals: [
+        { id: "a", description: "Antigo", kcal: 100 } as never,
+        { id: "b", eaten_at: "2026-10-19T15:00:00.000Z", description: "Normal", kcal: 200, protein_g: 1, carbs_g: 1, fat_g: 1 } as never,
+      ],
+      sleep: [{ id: "s", bed_at: "2026-10-19T01:00:00.000Z", wake_at: null }],
+    }, tz);
+    const rows = t.find((x) => x.name === "Refeições")!.rows;
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r[0])).toEqual(["", "19/10/2026 12:00"]);
+  });
+
+  it("fmtLocal com data inválida devolve vazio", () => {
+    expect(fmtLocal("x", "America/Sao_Paulo")).toBe("");
+  });
 });

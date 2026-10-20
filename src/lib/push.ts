@@ -41,7 +41,7 @@ export async function enablePush() {
     }));
   const j = sub.toJSON();
   await setDoc(row("push_subscriptions", await subId(sub.endpoint)), {
-    endpoint: sub.endpoint, p256dh: j.keys!.p256dh, auth: j.keys!.auth, user_agent: navigator.userAgent,
+    endpoint: sub.endpoint, p256dh: j.keys!.p256dh, auth: j.keys!.auth, user_agent: navigator.userAgent.slice(0, 500),
     created_at: new Date().toISOString(),
   });
 }
@@ -52,4 +52,10 @@ export async function disablePush() {
   if (!sub) return;
   await deleteDoc(row("push_subscriptions", await subId(sub.endpoint)));
   await sub.unsubscribe();
+}
+
+/** Sair do app: tira este aparelho das notificações, esperando no máximo `ms`. */
+export async function disablePushQuietly(ms = 3000) {
+  if (!pushSupported()) return;
+  await Promise.race([disablePush().catch(() => {}), new Promise((r) => setTimeout(r, ms))]);
 }

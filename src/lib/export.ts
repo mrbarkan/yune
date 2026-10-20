@@ -31,16 +31,18 @@ export async function loadExportData(): Promise<ExportData> {
 /** dd/mm/aaaa HH:mm no fuso da pessoa; vazio sem data. */
 export function fmtLocal(iso: string | null | undefined, tz: string): string {
   if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
   const p = Object.fromEntries(
     new Intl.DateTimeFormat("pt-BR", { timeZone: tz, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
-      .formatToParts(new Date(iso)).map((x) => [x.type, x.value]),
+      .formatToParts(d).map((x) => [x.type, x.value]),
   );
   return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}`;
 }
 
 export const exportFileName = (now: Date, tz: string) => `yune-dados-${localDay(now.toISOString(), tz)}`;
 
-const byDate = <T,>(list: T[], at: (x: T) => string) => [...list].sort((a, b) => at(a).localeCompare(at(b)));
+const byDate = <T,>(list: T[], at: (x: T) => string | null | undefined) => [...list].sort((a, b) => (at(a) ?? "").localeCompare(at(b) ?? ""));
 const fmtValue = (v: Value | undefined) => (Array.isArray(v) ? v.join(", ") : v ?? "");
 const answered = (v: Value | undefined) => (Array.isArray(v) ? v.length > 0 : typeof v === "string" ? v.trim() !== "" : v != null);
 
