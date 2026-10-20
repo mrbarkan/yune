@@ -58,7 +58,7 @@ describe("regras: dados", () => {
   it("reminders: push_details é booleano opcional", async () => {
     await assertSucceeds(setDoc(doc(alice(), "reminders/alice"), { ...DEFAULT_REMINDERS, push_details: true }));
     await assertFails(setDoc(doc(alice(), "reminders/alice"), { ...DEFAULT_REMINDERS, push_details: "sim" }));
-    const { push_details: _omit, ...semChave } = DEFAULT_REMINDERS as Record<string, unknown>;
+    const semChave = Object.fromEntries(Object.entries(DEFAULT_REMINDERS).filter(([k]) => k !== "push_details"));
     await assertSucceeds(setDoc(doc(alice(), "reminders/alice"), semChave));
   });
 

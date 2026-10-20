@@ -232,7 +232,7 @@ Steps:
 `DeleteAccountSheet` (`Sheet` title "Apagar minha conta"):
 - Text: "Isto apaga para sempre seu perfil, seus registros, fotos, exames, dietas e lembretes, e cancela o Pro na hora, sem cobranças futuras. Não dá para desfazer." and "Se quiser guardar uma cópia, use antes “Baixar tudo (.zip)”.".
 - Re-auth:
-  - **Password provider:** a `type="password"` field "Sua senha". Use `reauthenticateWithCredential(EmailAuthProvider.credential(email, pw))`; `auth/wrong-password` / `auth/invalid-credential` → "Senha incorreta.".
+  - **Password provider:** a `type="password"` field "Sua senha". Use `reauthenticateWithCredential(EmailAuthProvider.credential(email, pw))`; `auth/wrong-password` / `auth/invalid-credential` → "Senha incorreta."; any other re-auth failure → "Não foi possível confirmar a senha agora. Tente de novo.".
   - **Otherwise:** the button "Confirmar com Google" or "Confirmar com Apple", via `reauthenticateWithPopup`. On failure: "Não foi possível confirmar. Saia, entre de novo e volte aqui em até 10 minutos.".
 - A field "Digite APAGAR para confirmar". The `btn danger` "Apagar tudo" is enabled only when the word matches (trimmed, uppercase) and re-auth is possible.
 - Sequence: re-auth → `disablePushQuietly()` → `deleteAccount()`.

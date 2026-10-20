@@ -31,7 +31,25 @@ describe("replaceDiets", () => {
     expect(d.deactivate).toHaveBeenCalledWith("a");
     expect(d.remove.mock.calls.map((c) => c[0])).toEqual(["b"]);
     expect(err).toHaveBeenCalled();
-    expect(JSON.stringify(err.mock.calls)).not.toContain("boom");
+    expect(err.mock.calls.every((c) => c[0] === "importDietPlan: limpeza" && !JSON.stringify(c).includes("boom"))).toBe(true);
+    err.mockRestore();
+  });
+
+  it("falha ao apagar ou desativar um doc não interrompe os outros", async () => {
+    const d = deps([{ id: "a", file_path: null }, { id: "b", file_path: null }]);
+    d.remove.mockRejectedValueOnce(new Error("boom"));
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await replaceDiets(d, {})).toBe("new");
+    expect(d.remove.mock.calls.map((c) => c[0])).toEqual(["a", "b"]);
+    err.mockRestore();
+  });
+
+  it("falha ao listar não derruba a importação", async () => {
+    const d = deps([]);
+    d.list.mockRejectedValueOnce(new Error("boom"));
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await replaceDiets(d, {})).toBe("new");
+    expect(d.remove).not.toHaveBeenCalled();
     err.mockRestore();
   });
 

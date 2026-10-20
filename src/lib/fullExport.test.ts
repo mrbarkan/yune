@@ -76,10 +76,15 @@ describe("fullExport", () => {
     vi.stubGlobal("URL", { createObjectURL: () => "blob:x", revokeObjectURL: () => {} });
     const a = { click: () => {}, remove: () => {}, href: "", download: "" };
     vi.stubGlobal("document", { createElement: () => a, body: { appendChild: () => {} } });
-    const r = await downloadAll({ includeBody: false, tz: "America/Sao_Paulo", onProgress: () => {} });
-    expect(reads).not.toContain("body_photos");
-    expect(r.missing).toBe(1);
-    expect(a.download).toMatch(/^yune-meus-dados-/);
-    vi.unstubAllGlobals();
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const r = await downloadAll({ includeBody: false, tz: "America/Sao_Paulo", onProgress: () => {} });
+      expect(reads).not.toContain("body_photos");
+      expect(r.missing).toBe(1);
+      expect(a.download).toMatch(/^yune-meus-dados-/);
+    } finally {
+      err.mockRestore();
+      vi.unstubAllGlobals();
+    }
   });
 });

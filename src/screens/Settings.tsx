@@ -267,7 +267,7 @@ function ExportSection({ profile }: { profile: Profile }) {
         <button className="btn ghost" disabled={!!busy} onClick={() => run("pdf")}>{busy === "pdf" ? "Gerando…" : "PDF"}</button>
       </div>
       <Toggle label="Incluir fotos do corpo" on={body} onChange={setBody} />
-      <button className="btn ghost" disabled={!!busy} onClick={runZip}>{busy === "zip" ? `Baixando arquivos ${prog[0]}/${prog[1]}…` : "Baixar tudo (.zip)"}</button>
+      <button className="btn ghost" disabled={!!busy} onClick={runZip}>{busy === "zip" ? (prog[1] ? `Baixando arquivos ${prog[0]}/${prog[1]}…` : "Preparando…") : "Baixar tudo (.zip)"}</button>
       {note && <p className="note">{note}</p>}
       {err && <p className="note err">{err}</p>}
     </section>
@@ -391,7 +391,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals, onPro
         <p className="note">Seu plano continua aqui. Para enviar uma nova dieta, assine o Pro.</p>
         {confirm ? (
           <div className="row">
-            <p className="note">Apaga também as dietas anteriores guardadas.</p>
+            <p className="note">Apaga a dieta e o arquivo enviado.</p>
             <button className="btn ghost" onClick={() => setConfirm(false)}>Manter</button>
             <button className="btn danger" onClick={remove}>Apagar dieta</button>
           </div>
@@ -446,7 +446,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals, onPro
 
       {plan && !busy && (confirm ? (
         <div className="row">
-          <p className="note">Apaga também as dietas anteriores guardadas.</p>
+          <p className="note">Apaga a dieta e o arquivo enviado.</p>
           <button className="btn ghost" onClick={() => setConfirm(false)}>Manter</button>
           <button className="btn danger" onClick={remove}>Apagar dieta</button>
         </div>
