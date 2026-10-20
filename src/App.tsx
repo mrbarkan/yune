@@ -36,6 +36,7 @@ export default function App() {
 
 function Shell({ userId }: { userId: string }) {
   const { profile, reload, error: profileError } = useProfile(userId);
+  const [retrying, setRetrying] = useState(false);
   const [tab, setTab] = useState<Tab>("today");
   const [sheet, setSheet] = useState<SheetKind>(null);
   const [edit, setEdit] = useState<EditTarget | null>(null);
@@ -78,7 +79,9 @@ function Shell({ userId }: { userId: string }) {
     return (
       <main className="auth">
         <p className="note err">{profileError}</p>
-        <button className="btn primary" onClick={reload}>Tentar de novo</button>
+        <button className="btn primary" disabled={retrying} onClick={async () => { setRetrying(true); try { await reload(); } finally { setRetrying(false); } }}>
+          {retrying ? "…" : "Tentar de novo"}
+        </button>
         <nav className="auth-switch"><button onClick={() => signOut(auth)}>Sair</button></nav>
       </main>
     );

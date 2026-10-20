@@ -16,7 +16,7 @@ export async function retryDenied<T>(
       return await fn();
     } catch (err) {
       if (!isDenied(err) || i >= tries) throw err;
-      await refresh().catch(() => {});
+      await refresh().catch((e) => console.warn("Falha ao renovar o token", e));
       await wait(300 * i);
     }
   }

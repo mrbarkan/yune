@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getDoc, getDocs, orderBy, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { auth, DEFAULT_PROFILE, DEFAULT_REMINDERS, profileDoc, remindersDoc, rows, table, type Activity, type Meal, type Profile, type Sleep, type Water } from "./firebase";
-import { retryDenied } from "./retry";
+import { withGoalDefaults } from "./profileDefaults";
+import { isDenied, retryDenied } from "./retry";
 import { addDays, startOfDay } from "./time";
 
 export type DayData = { meals: Meal[]; activities: Activity[]; water: Water[]; sleep: Sleep[] };
@@ -110,7 +111,7 @@ export function useProfile(userId: string | undefined) {
       await setDoc(ref, data);
       await setDoc(remindersDoc(userId), DEFAULT_REMINDERS);
     } else {
-      p = { ...(snap.data() as Omit<Profile, "id">), id: userId };
+      p = withGoalDefaults({ ...(snap.data() as Omit<Profile, "id">), id: userId });
       if (p.timezone !== tz) {
         await updateDoc(ref, { timezone: tz });
         p.timezone = tz;
@@ -124,8 +125,11 @@ export function useProfile(userId: string | undefined) {
     try {
       await retryDenied(load, () => auth.currentUser?.getIdToken(true) ?? Promise.resolve());
     } catch (err) {
+      // Depois da primeira carga o perfil já está na tela: falhas de reload (ex.: ao salvar) só vão para o console.
       console.error(err);
-      setError("Não foi possível carregar seu perfil. Verifique a conexão e tente de novo.");
+      setError(isDenied(err)
+        ? "Não conseguimos confirmar seu acesso. Saia e entre de novo."
+        : "Não foi possível carregar seu perfil. Verifique a conexão e tente de novo.");
     }
   }, [load]);
   useEffect(() => {
