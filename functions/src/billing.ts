@@ -16,11 +16,17 @@ const APP_URL = defineString("APP_URL");
 const PRICES = { monthly: "yune_pro_monthly", annual: "yune_pro_annual" } as const;
 
 /** Só o que o código usa do Firestore (os testes passam um stub em memória). */
+type DocRef = {
+  get(): Promise<{ get(field: string): unknown }>;
+  set(data: Record<string, unknown>, options: { merge: boolean }): Promise<unknown>;
+};
+type Tx = {
+  get(ref: DocRef): Promise<{ get(field: string): unknown }>;
+  set(ref: DocRef, data: Record<string, unknown>, options: { merge: boolean }): unknown;
+};
 export type Db = {
-  doc(path: string): {
-    get(): Promise<{ get(field: string): unknown }>;
-    set(data: Record<string, unknown>, options: { merge: boolean }): Promise<unknown>;
-  };
+  doc(path: string): DocRef;
+  runTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T>;
 };
 type SubscriptionLister = {
   subscriptions: { list(params: Stripe.SubscriptionListParams): PromiseLike<{ data: Stripe.Subscription[] }> };
@@ -29,23 +35,30 @@ type CustomerReader = {
   customers: { retrieve(id: string): PromiseLike<Stripe.Customer | Stripe.DeletedCustomer> };
 };
 
-/** Relê as assinaturas do customer e regrava entitlements/{uid} (merge; beta_until fica como está). */
+/**
+ * Relê as assinaturas do customer e regrava entitlements/{uid} (merge; beta_until fica como está).
+ * Tudo numa transação, lendo o entitlement antes de listar: o servidor trava o documento, então quando
+ * created/paid/updated chegam juntos quem listou por último grava por último (a outra tentativa é refeita).
+ */
 export async function syncCustomer(stripe: SubscriptionLister, db: Db, uid: string, customerId: string, now: Date) {
-  const { data } = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 100 });
-  const subs = data.filter((s) => !isIncomplete(s)).sort((a, b) => b.created - a.created);
-  // A mais nova que dá Pro; senão a mais nova. Assim uma segunda assinatura cancelada não tira o Pro de quem paga.
-  const sub = subs.find((s) => COUNTING.has(s.status)) ?? subs[0] ?? null;
-  const stripeState = stripeStateFrom(sub);
-
   const entRef = db.doc(`entitlements/${uid}`);
-  const beta_until = ((await entRef.get()).get("beta_until") as string | null | undefined) ?? null;
-  await entRef.set({ stripe: stripeState, ...deriveEntitlement({ beta_until, stripe: stripeState }, now) }, { merge: true });
+  const billingRef = db.doc(`billing/${uid}`);
+  await db.runTransaction(async (tx) => {
+    const beta_until = ((await tx.get(entRef)).get("beta_until") as string | null | undefined) ?? null;
+    const { data } = await stripe.subscriptions.list({ customer: customerId, status: "all", limit: 100 });
+    const subs = data.filter((s) => !isIncomplete(s)).sort((a, b) => b.created - a.created);
+    // A mais nova que dá Pro; senão a mais nova. Assim uma segunda assinatura cancelada não tira o Pro de quem paga.
+    const sub = subs.find((s) => COUNTING.has(s.status)) ?? subs[0] ?? null;
+    const stripeState = stripeStateFrom(sub);
 
-  const trialUsed = subs.some((s) => s.trial_start != null);
-  await db.doc(`billing/${uid}`).set(
-    { customer_id: customerId, subscription_id: sub?.id ?? null, ...(trialUsed ? { trial_used: true } : {}) },
-    { merge: true },
-  );
+    tx.set(entRef, { stripe: stripeState, ...deriveEntitlement({ beta_until, stripe: stripeState }, now) }, { merge: true });
+    const trialUsed = subs.some((s) => s.trial_start != null);
+    tx.set(
+      billingRef,
+      { customer_id: customerId, subscription_id: sub?.id ?? null, ...(trialUsed ? { trial_used: true } : {}) },
+      { merge: true },
+    );
+  });
 }
 
 const SYNC_EVENTS = new Set([
