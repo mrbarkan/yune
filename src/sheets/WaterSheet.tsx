@@ -1,33 +1,51 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sheet } from "@/components/Sheet";
 import { addDoc, updateDoc } from "firebase/firestore";
+import { todayWaterMl } from "@/lib/data";
 import { DEFAULT_WATER_SIZES, profileDoc, row, table, type Profile, type Water } from "@/lib/firebase";
 import { fmtLiters, fmtNum, fromLocalInput, toLocalInput } from "@/lib/time";
 
 const validMl = (ml: number) => Number.isInteger(ml) && ml >= 10 && ml <= 3000;
 
 /** Copos rápidos do dia, ou o registro `water` já salvo para corrigir. */
-export function WaterSheet({ profile, todayMl, water, onClose, onSaved, onProfile }: {
+export function WaterSheet({ profile, water, onClose, onSaved, onProfile }: {
   profile: Profile;
-  todayMl: number;
   water?: Water;
   onClose: () => void;
   onSaved: () => void;
   onProfile: () => void;
 }) {
   const sizes = profile.water_sizes?.length === 4 ? profile.water_sizes : DEFAULT_WATER_SIZES;
-  const [total, setTotal] = useState(todayMl);
+  const [base, setBase] = useState<number | null>(null);
+  const [added, setAdded] = useState(0);
   const [custom, setCustom] = useState("");
   const [err, setErr] = useState("");
   const [editing, setEditing] = useState<string[] | null>(null);
+  const total = (base ?? 0) + added;
   const frac = Math.min(total / profile.water_goal_ml, 1);
+
+  useEffect(() => {
+    if (water) return;
+    let alive = true;
+    todayWaterMl().then(
+      (ml) => alive && setBase(ml),
+      () => {
+        if (!alive) return;
+        setBase(0);
+        setErr("Não foi possível carregar a água de hoje.");
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, [water]);
 
   async function add(ml: number) {
     if (!ml) return;
     const error = await addDoc(table("water"), { ml, drank_at: new Date().toISOString(), created_at: new Date().toISOString() })
       .then(() => null, () => "Quantidade inválida.");
     if (error) return setErr(error);
-    setTotal((t) => t + ml);
+    setAdded((a) => a + ml);
     navigator.vibrate?.(8);
     onSaved();
   }
@@ -49,7 +67,7 @@ export function WaterSheet({ profile, todayMl, water, onClose, onSaved, onProfil
     <Sheet title="Água" accent="water" onClose={onClose}>
       <div className="glass" aria-label={`${fmtLiters(total)} de ${fmtLiters(profile.water_goal_ml)} litros`}>
         <div className="glass-fill" style={{ height: `${frac * 100}%` }} />
-        <span className="big-num">{fmtLiters(total)}<small>/ {fmtLiters(profile.water_goal_ml)} L</small></span>
+        <span className="big-num">{base === null ? "—" : fmtLiters(total)}<small>/ {fmtLiters(profile.water_goal_ml)} L</small></span>
       </div>
 
       {editing ? (

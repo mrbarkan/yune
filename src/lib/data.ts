@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getDoc, getDocs, orderBy, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { auth, DEFAULT_PROFILE, DEFAULT_REMINDERS, profileDoc, remindersDoc, rows, table, type Activity, type Meal, type Profile, type Sleep, type Water } from "./firebase";
 import { addDays, startOfDay } from "./time";
@@ -26,6 +26,13 @@ export async function loadRange(from: Date, to: Date): Promise<DayData> {
     water: rows<Water>(water),
     sleep: [...rows<Sleep>(woke), ...rows<Sleep>(asleep)].sort((a, b) => a.bed_at.localeCompare(b.bed_at)),
   };
+}
+
+/** Total de água de hoje (ml) com uma única consulta. */
+export async function todayWaterMl(now = new Date()): Promise<number> {
+  const from = startOfDay(now);
+  const snap = await getDocs(query(table("water"), where("drank_at", ">=", from.toISOString()), where("drank_at", "<", addDays(from, 1).toISOString()), orderBy("drank_at")));
+  return rows<Water>(snap).reduce((s, w) => s + w.ml, 0);
 }
 
 export function splitByDay(data: DayData, day: Date): DayData {
@@ -64,14 +71,20 @@ export function useRange(from: Date, days: number, version: number) {
   const [data, setData] = useState<DayData>(EMPTY);
   const [loading, setLoading] = useState(true);
   const key = startOfDay(from).getTime();
+  const loaded = useRef("");
   useEffect(() => {
     let alive = true;
-    setLoading(true);
+    const id = `${key}:${days}`;
+    // Só mostra "carregando" ao trocar de período; ao atualizar, os dados continuam na tela.
+    if (loaded.current !== id) setLoading(true);
     loadRange(new Date(key), addDays(new Date(key), days)).then((d) => {
       if (alive) {
+        loaded.current = id;
         setData(d);
         setLoading(false);
       }
+    }, () => {
+      if (alive) setLoading(false);
     });
     return () => {
       alive = false;

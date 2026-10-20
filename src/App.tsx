@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { onIdTokenChanged, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { splitByDay, totals, useProfile, useRange } from "@/lib/data";
+import { useProfile } from "@/lib/data";
 import { useDietPlan } from "@/lib/diet";
 import { canUse, stripeActive, useEntitlements } from "@/lib/pro";
 import { parseProReturn, withoutProParam } from "@/lib/proReturn";
-import { startOfDay } from "@/lib/time";
+import { shouldRefresh } from "@/lib/refresh";
 import Auth from "@/screens/Auth";
 import Today, { type EditTarget } from "@/screens/Today";
 import Week from "@/screens/Week";
@@ -40,7 +40,11 @@ function Shell({ userId }: { userId: string }) {
   const [sheet, setSheet] = useState<SheetKind>(null);
   const [edit, setEdit] = useState<EditTarget | null>(null);
   const [version, setVersion] = useState(0);
-  const bump = useCallback(() => setVersion((v) => v + 1), []);
+  const lastLoad = useRef(Date.now());
+  const bump = useCallback(() => {
+    lastLoad.current = Date.now();
+    setVersion((v) => v + 1);
+  }, []);
   const close = useCallback(() => {
     setSheet(null);
     setEdit(null);
@@ -62,11 +66,9 @@ function Shell({ userId }: { userId: string }) {
     }
   }, [proReturn, proLive]);
   const plan = useDietPlan(version);
-  const { data: today } = useRange(startOfDay(new Date()), 1, version);
-  const todayMl = totals(splitByDay(today, new Date())).waterMl;
 
   useEffect(() => {
-    const refresh = () => document.visibilityState === "visible" && bump();
+    const refresh = () => document.visibilityState === "visible" && shouldRefresh(lastLoad.current, Date.now()) && bump();
     document.addEventListener("visibilitychange", refresh);
     return () => document.removeEventListener("visibilitychange", refresh);
   }, [bump]);
@@ -117,11 +119,11 @@ function Shell({ userId }: { userId: string }) {
       )}
       {sheet === "food" && <FoodSheet profile={profile} plan={plan} dietOn={dietAllowed} onClose={close} onSaved={saved} />}
       {sheet === "move" && <MoveSheet profile={profile} onClose={close} onSaved={saved} />}
-      {sheet === "water" && <WaterSheet profile={profile} todayMl={todayMl} onClose={close} onSaved={bump} onProfile={reload} />}
+      {sheet === "water" && <WaterSheet profile={profile} onClose={close} onSaved={bump} onProfile={reload} />}
       {sheet === "sleep" && <SleepSheet onClose={close} onSaved={saved} />}
       {edit?.kind === "food" && <FoodSheet profile={profile} plan={plan} dietOn={dietAllowed} meal={edit.rec} onClose={close} onSaved={saved} />}
       {edit?.kind === "move" && <MoveSheet profile={profile} activity={edit.rec} onClose={close} onSaved={saved} />}
-      {edit?.kind === "water" && <WaterSheet profile={profile} todayMl={todayMl} water={edit.rec} onClose={close} onSaved={saved} onProfile={reload} />}
+      {edit?.kind === "water" && <WaterSheet profile={profile} water={edit.rec} onClose={close} onSaved={saved} onProfile={reload} />}
       {edit?.kind === "sleep" && <SleepSheet sleep={edit.rec} onClose={close} onSaved={saved} />}
       {sheet === "pro" && <ProSheet onClose={close} />}
       {sheet === "diet" && plan && <DietSheet plan={plan} onClose={close} />}
