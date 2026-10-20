@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nearestMeasurement, sessions } from "./photos";
+import { compareChange, nearestMeasurement, sessions } from "./photos";
 import type { BodyPhoto, Measurement, Pose } from "./firebase";
 
 const p = (id: string, pose: Pose, taken_at: string): BodyPhoto => ({ id, pose, taken_at, path: `body-photos/u/${id}.jpg` });
@@ -31,5 +31,22 @@ describe("nearestMeasurement", () => {
   });
   it("devolve nulo quando passa de 3 dias", () => {
     expect(nearestMeasurement([m("a", "2026-10-10T12:00:00.000Z")], "2026-10-18")).toBeNull();
+  });
+});
+
+describe("compareChange", () => {
+  const m = (id: string, weight_kg: number, waist_cm: number | null): Measurement => ({ id, measured_at: "2026-10-01T12:00:00.000Z", weight_kg, waist_cm, hip_cm: null, neck_cm: null, source: "manual" });
+  it("é nulo quando as duas são a mesma medida", () => {
+    const a = m("a", 70, 80);
+    expect(compareChange(a, a)).toBeNull();
+  });
+  it("devolve as variações entre medidas diferentes", () => {
+    expect(compareChange(m("a", 75, 90), m("b", 72, 85))).toEqual({ weight: -3, waist: -5 });
+  });
+  it("cintura nula quando falta em uma", () => {
+    expect(compareChange(m("a", 75, null), m("b", 72, 85))).toEqual({ weight: -3, waist: null });
+  });
+  it("é nulo quando falta uma medida", () => {
+    expect(compareChange(null, m("b", 72, 85))).toBeNull();
   });
 });

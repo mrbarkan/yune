@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PrivateImage } from "@/components/PrivateImage";
 import type { BodyPhoto, Measurement, Pose, Profile } from "@/lib/firebase";
 import { compressImage } from "@/lib/image";
-import { addBodyPhoto, deleteBodyPhoto, nearestMeasurement, sessions } from "@/lib/photos";
+import { addBodyPhoto, deleteBodyPhoto, compareChange, nearestMeasurement, sessions } from "@/lib/photos";
 import { f1 } from "@/screens/MeasurementsView";
 
 const POSES: { id: Pose; label: string }[] = [
@@ -73,8 +73,8 @@ export default function PhotosView({ profile, photos, measurements, loadErr, onB
       await deleteBodyPhoto(p);
     } catch {
       setErr("Não foi possível apagar.");
-      return;
     }
+    // Mesmo com erro, recarrega: o registro pode ter sido apagado em parte.
     setConfirm(null);
     onChanged();
   }
@@ -84,12 +84,11 @@ export default function PhotosView({ profile, photos, measurements, loadErr, onB
   }
 
   const pair = picked.length === 2 ? [...picked].sort() : null;
-  const delta = (key: "weight_kg" | "waist_cm", a: Measurement | null, b: Measurement | null) =>
-    a && b && a[key] != null && b[key] != null ? (b[key] as number) - (a[key] as number) : null;
-  const ma = pair ? nearestMeasurement(measurements, pair[0]) : null;
-  const mb = pair ? nearestMeasurement(measurements, pair[1]) : null;
-  const dWeight = delta("weight_kg", ma, mb);
-  const dWaist = delta("waist_cm", ma, mb);
+  const change = pair
+    ? compareChange(nearestMeasurement(measurements, pair[0]), nearestMeasurement(measurements, pair[1]))
+    : null;
+  const dWeight = change?.weight ?? null;
+  const dWaist = change?.waist ?? null;
 
   return (
     <main className="screen settings">

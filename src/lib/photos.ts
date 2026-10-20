@@ -40,14 +40,14 @@ export async function addBodyPhoto(pose: Pose, file: File, takenAt: Date) {
   }
 }
 
-/** Apaga o registro e depois o arquivo (arquivo que já não existe não é erro). */
+/** Apaga o arquivo e depois o registro (arquivo que já não existe não é erro; assim tentar de novo funciona). */
 export async function deleteBodyPhoto(p: BodyPhoto) {
-  await deleteDoc(row("body_photos", p.id));
   try {
     await deleteObject(ref(storage, p.path));
   } catch (e) {
     if ((e as { code?: string }).code !== "storage/object-not-found") throw e;
   }
+  await deleteDoc(row("body_photos", p.id));
 }
 
 export const localDay = (iso: string, tz: string) => new Date(iso).toLocaleDateString("en-CA", { timeZone: tz });
@@ -80,4 +80,12 @@ export function nearestMeasurement(list: Measurement[], day: string): Measuremen
     }
   }
   return best && bestOff <= 3 * DAY ? best : null;
+}
+
+/** Variação de peso e cintura entre duas medidas; sem variação quando falta uma ou é a mesma medida. */
+export function compareChange(a: Measurement | null, b: Measurement | null): { weight: number | null; waist: number | null } | null {
+  if (!a || !b || a.id === b.id) return null;
+  const weight = b.weight_kg - a.weight_kg;
+  const waist = a.waist_cm != null && b.waist_cm != null ? b.waist_cm - a.waist_cm : null;
+  return { weight, waist };
 }
