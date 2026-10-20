@@ -118,4 +118,15 @@ describe("createAutosaver", () => {
     expect(dayKey(new Date("2026-10-19T02:59:00Z"), "America/Sao_Paulo")).toBe("2026-10-18");
     expect(dayKey(new Date("2026-10-19T03:00:00Z"), "America/Sao_Paulo")).toBe("2026-10-19");
   });
+  it("resume depois de dispose volta a avisar o status (StrictMode)", async () => {
+    const onStatus = vi.fn();
+    const a = createAutosaver(vi.fn(async () => {}), 1000, onStatus);
+    await a.dispose();
+    a.resume();
+    a.touch();
+    await vi.advanceTimersByTimeAsync(1000);
+    await Promise.resolve();
+    expect(onStatus).toHaveBeenCalledWith("saving");
+    expect(onStatus).toHaveBeenLastCalledWith("saved");
+  });
 });

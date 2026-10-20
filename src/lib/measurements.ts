@@ -1,27 +1,10 @@
-import { useEffect, useState } from "react";
 import { addDoc, deleteDoc, getDocs, limit, orderBy, query, updateDoc } from "firebase/firestore";
+import { useCollection } from "./useCollection";
 import { profileDoc, row, rows, table, type Measurement, type Profile } from "./firebase";
 
 const DAY = 86_400_000;
 
-export function useMeasurements(version: number) {
-  const [list, setList] = useState<Measurement[]>([]);
-  const [err, setErr] = useState("");
-  useEffect(() => {
-    let alive = true;
-    getDocs(query(table("measurements"), orderBy("measured_at")))
-      .then((snap) => {
-        if (!alive) return;
-        setList(rows<Measurement>(snap));
-        setErr("");
-      })
-      .catch(() => alive && setErr("Não foi possível carregar as medidas."));
-    return () => {
-      alive = false;
-    };
-  }, [version]);
-  return { list, err };
-}
+export const useMeasurements = (version: number) => useCollection<Measurement>("measurements", "measured_at", version, "Não foi possível carregar as medidas.");
 
 /** O peso do perfil acompanha a medida mais recente (pela data da medida); sem medidas, fica como está. */
 export async function syncProfileWeight(profileId: string) {

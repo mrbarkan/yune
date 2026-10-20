@@ -176,6 +176,8 @@ export function createAutosaver(save: () => Promise<void>, delayMs: number, onSt
     flush,
     /** Já gravou alguma coisa nesta sessão? */
     get wrote() { return wrote; },
+    /** Reabre depois de dispose (StrictMode monta, desmonta e monta de novo). */
+    resume() { alive = true; },
     dispose(): Promise<boolean> {
       const p = flush();
       alive = false;

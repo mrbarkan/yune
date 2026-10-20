@@ -1,35 +1,16 @@
-import { useEffect, useState } from "react";
-import { addDoc, deleteDoc, getDocs, orderBy, query } from "firebase/firestore";
+import { addDoc, deleteDoc } from "firebase/firestore";
 import { deleteObject, ref, uploadBytes } from "firebase/storage";
-import { auth, row, rows, storage, table, type BodyPhoto, type Measurement, type Pose } from "./firebase";
-import { compressImage } from "./image";
+import { auth, row, storage, table, type BodyPhoto, type Measurement, type Pose } from "./firebase";
+import { useCollection } from "./useCollection";
 
 const DAY = 86_400_000;
 
-export function useBodyPhotos(version: number) {
-  const [list, setList] = useState<BodyPhoto[]>([]);
-  const [err, setErr] = useState("");
-  useEffect(() => {
-    let alive = true;
-    getDocs(query(table("body_photos"), orderBy("taken_at")))
-      .then((snap) => {
-        if (!alive) return;
-        setList(rows<BodyPhoto>(snap));
-        setErr("");
-      })
-      .catch(() => alive && setErr("Não foi possível carregar as fotos."));
-    return () => {
-      alive = false;
-    };
-  }, [version]);
-  return { list, err };
-}
+export const useBodyPhotos = (version: number) => useCollection<BodyPhoto>("body_photos", "taken_at", version, "Não foi possível carregar as fotos.");
 
 /** Sobe o arquivo (nome novo: as regras não deixam sobrescrever) e cria o registro; se o registro falhar, apaga o arquivo. */
-export async function addBodyPhoto(pose: Pose, file: File, takenAt: Date) {
+export async function addBodyPhoto(pose: Pose, blob: Blob, takenAt: Date) {
   const u = auth.currentUser;
   if (!u) throw new Error("Faça login para continuar.");
-  const { blob } = await compressImage(file, 1600, 0.85);
   const path = `body-photos/${u.uid}/${crypto.randomUUID()}.jpg`;
   await uploadBytes(ref(storage, path), blob, { contentType: "image/jpeg" });
   try {

@@ -23,7 +23,7 @@ export default function PhotosView({ profile, photos, measurements, loadErr, onB
   onBack: () => void; onChanged: () => void;
 }) {
   const [pose, setPose] = useState<Pose>("frente");
-  const [pending, setPending] = useState<{ file: File; preview: string } | null>(null);
+  const [pending, setPending] = useState<{ blob: Blob; preview: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [compare, setCompare] = useState(false);
@@ -44,8 +44,8 @@ export default function PhotosView({ profile, photos, measurements, loadErr, onB
     if (!file) return;
     setErr("");
     try {
-      const { preview } = await compressImage(file, 1600, 0.85);
-      setPending({ file, preview });
+      const { blob, preview } = await compressImage(file, 1600, 0.85);
+      setPending({ blob, preview });
     } catch {
       setErr("Não foi possível ler a foto.");
     }
@@ -56,7 +56,7 @@ export default function PhotosView({ profile, photos, measurements, loadErr, onB
     setBusy(true);
     setErr("");
     try {
-      await addBodyPhoto(pose, pending.file, new Date());
+      await addBodyPhoto(pose, pending.blob, new Date());
     } catch {
       setErr("Não foi possível salvar a foto. Tente de novo.");
       setBusy(false);
@@ -98,7 +98,7 @@ export default function PhotosView({ profile, photos, measurements, loadErr, onB
         <h1 className="day-title">Fotos de evolução</h1>
       </header>
 
-      <p className="note photo-lock">Só você vê. O Yune não salva estas fotos na galeria nem cria links para elas.</p>
+      <p className="note photo-lock">Só você vê. O Yune não salva estas fotos na galeria e não tem botão de compartilhar.</p>
 
       <div className="segmented" role="tablist">
         {POSES.map((p) => (

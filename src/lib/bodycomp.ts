@@ -1,28 +1,11 @@
-import { useEffect, useState } from "react";
-import { deleteDoc, getDocs, orderBy, query } from "firebase/firestore";
+import { deleteDoc } from "firebase/firestore";
 import { deleteObject, getBlob, ref, uploadBytes } from "firebase/storage";
-import { auth, row, rows, storage, table, type BodyComp, type BodyCompValues } from "./firebase";
+import { auth, row, storage, type BodyComp, type BodyCompValues } from "./firebase";
 import { compressImage } from "./image";
+import { useCollection } from "./useCollection";
 import { parseDecimal } from "./num";
 
-export function useBodyComp(version: number) {
-  const [list, setList] = useState<BodyComp[]>([]);
-  const [err, setErr] = useState("");
-  useEffect(() => {
-    let alive = true;
-    getDocs(query(table("body_comp"), orderBy("measured_at")))
-      .then((snap) => {
-        if (!alive) return;
-        setList(rows<BodyComp>(snap));
-        setErr("");
-      })
-      .catch(() => alive && setErr("Não foi possível carregar a composição corporal."));
-    return () => {
-      alive = false;
-    };
-  }, [version]);
-  return { list, err };
-}
+export const useBodyComp = (version: number) => useCollection<BodyComp>("body_comp", "measured_at", version, "Não foi possível carregar a composição corporal.");
 
 /** Faixas aceitas pelo servidor; campo vazio vai como null (0 é recusado). */
 export const FIELDS: { key: keyof BodyCompValues; label: string; unit: string; min: number; max: number }[] = [

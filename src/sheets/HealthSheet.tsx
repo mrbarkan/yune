@@ -29,8 +29,9 @@ export function HealthSheet({ profile, initial, onClose, onSaved }: Props) {
   const s = saver.current;
 
   // Se a tela sair sem passar por "fechar", grava a pendência uma vez e avisa o Perfil.
-  useEffect(() => () => {
-    void s.dispose().then(() => s.wrote && onSavedRef.current());
+  useEffect(() => {
+    s.resume();
+    return () => { void s.dispose().then(() => s.wrote && onSavedRef.current()); };
   }, [s]);
 
   const flush = s.flush;

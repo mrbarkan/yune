@@ -61,16 +61,16 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
   const [settings, setSettings] = useState(false);
   const [meas, setMeas] = useState<"" | "view" | "add">("");
   const [mv, setMv] = useState(0);
-  const { list, err: measErr } = useMeasurements(version + mv);
+  const { list, err: measErr, loaded: measLoaded } = useMeasurements(version + mv);
   const [photosOpen, setPhotosOpen] = useState(false);
   const [pv, setPv] = useState(0);
   const photos = useBodyPhotos(version + pv);
   const [body, setBody] = useState<"" | "view" | "add">("");
   const [bv, setBv] = useState(0);
-  const { list: bodyList, err: bodyErr } = useBodyComp(version + bv);
+  const { list: bodyList, err: bodyErr, loaded: bodyLoaded } = useBodyComp(version + bv);
   const [labs, setLabs] = useState<"" | "view" | "add">("");
   const [lv, setLv] = useState(0);
-  const { list: labList, err: labErr } = useLabReports(version + lv);
+  const { list: labList, err: labErr, loaded: labLoaded } = useLabReports(version + lv);
   const [edit, setEdit] = useState(false);
   const closeEdit = useCallback(() => setEdit(false), []);
   const [healthOpen, setHealthOpen] = useState(false);
@@ -96,7 +96,7 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
   const bodyAllowed = canUse(ent, "body_comp");
   if (body) {
     return (
-      <BodyCompView profile={profile} list={bodyList} loadErr={bodyErr} measurements={measErr ? null : list} allowed={bodyAllowed} startAdding={body === "add"}
+      <BodyCompView profile={profile} list={bodyList} loadErr={bodyErr} measurements={measErr || !measLoaded ? null : list} allowed={bodyAllowed} startAdding={body === "add"}
         onPro={onPro} onBack={() => setBody("")} onChanged={() => { setBv((n) => n + 1); setMv((n) => n + 1); onSaved(); }} />
     );
   }
@@ -176,12 +176,12 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
             </div>
             {list.length > 1 && <LineChart compact unit="kg" color="var(--ink)" points={list.map((m) => ({ t: m.measured_at, v: m.weight_kg }))} />}
           </button>
-        ) : measErr ? null : (
+        ) : measErr || !measLoaded ? null : (
           <p className="empty">Registre seu peso</p>
         )}
         {measErr && <p className="note err">{measErr}</p>}
       </Card>
-      <Card label="Composição corporal" action="+ enviar" locked={!bodyAllowed && !bodyList.length && !bodyErr}
+      <Card label="Composição corporal" action="+ enviar" locked={!bodyAllowed && bodyLoaded && !bodyList.length && !bodyErr}
         onOpen={() => (bodyAllowed ? setBody("add") : onPro())} onPro={onPro}>
         {bodyLast ? (
           <button className="pcard-body" onClick={() => setBody("view")}>
@@ -193,12 +193,12 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
             </div>
             {bodyDelta && deltaText(bodyDelta) && <small>Desde {new Date(bodyDelta.since).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}: <b>{deltaText(bodyDelta)}</b></small>}
           </button>
-        ) : bodyErr ? null : (
+        ) : bodyErr || !bodyLoaded ? null : (
           <p className="empty">Envie um laudo de bioimpedância</p>
         )}
         {bodyErr && <p className="note err">{bodyErr}</p>}
       </Card>
-      <Card label="Exames" action="+ enviar" locked={!labsAllowed && !labList.length && !labErr}
+      <Card label="Exames" action="+ enviar" locked={!labsAllowed && labLoaded && !labList.length && !labErr}
         onOpen={() => (labsAllowed ? setLabs("add") : onPro())} onPro={onPro}>
         {labLast ? (
           <button className="pcard-body" onClick={() => setLabs("view")}>
@@ -208,7 +208,7 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
             </div>
             {labBits.length > 0 && <small>{labBits.join(" · ")}</small>}
           </button>
-        ) : labErr ? null : (
+        ) : labErr || !labLoaded ? null : (
           <p className="empty">Envie um exame de sangue</p>
         )}
         {labErr && <p className="note err">{labErr}</p>}
@@ -217,7 +217,7 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
         <Card label="Fotos" half onOpen={() => setPhotosOpen(true)}>
           <button className="pcard-body" onClick={() => setPhotosOpen(true)}>
             <p className="empty">
-              {photos.list.length ? `${sessions(photos.list, profile.timezone).length} sessões` : "Nenhum registro"} <span aria-hidden>🔒</span>
+              {!photos.loaded ? "…" : photos.list.length ? `${sessions(photos.list, profile.timezone).length} sessões` : "Nenhum registro"} <span aria-hidden>🔒</span>
             </p>
           </button>
         </Card>

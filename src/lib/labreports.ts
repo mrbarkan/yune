@@ -1,29 +1,12 @@
-import { useEffect, useState } from "react";
-import { deleteDoc, getDocs, orderBy, query } from "firebase/firestore";
-import { row, rows, table, type LabReport, type LabResult } from "./firebase";
+import { deleteDoc } from "firebase/firestore";
+import { row, type LabReport, type LabResult } from "./firebase";
 import { deleteHealthFile } from "./bodycomp";
 import { localDay } from "./photos";
+import { useCollection } from "./useCollection";
 import { homaIr } from "./health";
 import { normalizeResult, outOfRange } from "./labs";
 
-export function useLabReports(version: number) {
-  const [list, setList] = useState<LabReport[]>([]);
-  const [err, setErr] = useState("");
-  useEffect(() => {
-    let alive = true;
-    getDocs(query(table("lab_reports"), orderBy("collected_at")))
-      .then((snap) => {
-        if (!alive) return;
-        setList(rows<LabReport>(snap));
-        setErr("");
-      })
-      .catch(() => alive && setErr("Não foi possível carregar os exames."));
-    return () => {
-      alive = false;
-    };
-  }, [version]);
-  return { list, err };
-}
+export const useLabReports = (version: number) => useCollection<LabReport>("lab_reports", "collected_at", version, "Não foi possível carregar os exames.");
 
 /** Apaga os arquivos (um a um) e depois o registro; se um arquivo falhar, o registro fica. */
 export async function deleteLabReport(r: LabReport) {
