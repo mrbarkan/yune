@@ -401,6 +401,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
           <button className="btn ghost" onClick={() => setPaste("")}>Colar texto</button>
         </div>
       )}
+      {plan && <p className="note">A dieta nova substitui a atual, que é apagada.</p>}
 
       {plan && !busy && (confirm ? (
         <div className="row">

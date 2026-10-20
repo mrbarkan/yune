@@ -2,9 +2,11 @@
 // Recurso Pro (ver pro.ts). Usa o mesmo segredo ANTHROPIC_API_KEY de estimateFood.
 import Anthropic from "@anthropic-ai/sdk";
 import { getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import { defineSecret } from "firebase-functions/params";
 import { onCall } from "firebase-functions/v2/https";
 import { clipPlan } from "./dietClip.js";
+import { replaceDiets } from "./dietReplace.js";
 import { fileContent } from "./files.js";
 import { isPro } from "./pro.js";
 import { REGION } from "./region.js";
@@ -188,21 +190,22 @@ export const importDietPlan = onCall(
     unclipped.rules = plan.rules.map((r) => ({ ...r, keywords: [...new Set(r.keywords.map(fold).filter(Boolean))].slice(0, 12) }));
     const rest = clipPlan(unclipped);
 
-    // Só uma dieta ativa por vez; as anteriores ficam guardadas.
-    const db = getFirestore();
-    const col = db.collection(`users/${uid}/diet_plans`);
-    const active = await col.where("active", "==", true).get();
-    const ref = col.doc();
-    const batch = db.batch();
-    active.docs.forEach((d) => batch.update(d.ref, { active: false }));
-    batch.set(ref, {
-      ...rest,
-      active: true,
-      file_path: path,
-      file_name: path ? fileName : null,
-      created_at: new Date().toISOString(),
-    });
-    await batch.commit();
-    return { id: ref.id };
+    // A dieta nova substitui as anteriores (documento e arquivo): ver dietReplace.ts.
+    const col = getFirestore().collection(`users/${uid}/diet_plans`);
+    const id = await replaceDiets(
+      {
+        list: async () => (await col.get()).docs.map((d) => ({ id: d.id, file_path: (d.get("file_path") as string | null) ?? null })),
+        create: async (data) => (await col.add(data)).id,
+        remove: async (docId) => void (await col.doc(docId).delete()),
+        deleteFile: async (p) => void (await getStorage().bucket().file(p).delete({ ignoreNotFound: true })),
+      },
+      {
+        ...rest,
+        file_path: path,
+        file_name: path ? fileName : null,
+        created_at: new Date().toISOString(),
+      },
+    );
+    return { id };
   },
 );

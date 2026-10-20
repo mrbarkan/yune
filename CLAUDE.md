@@ -15,7 +15,7 @@ PWA de diário de saúde (comida, movimento, água, sono). Todo texto de interfa
   itens próprios em `custom_foods`, histórico em `meals.items`). IA (`estimateFood`, Claude Haiku) só para texto livre, foto do prato e rótulo.
 - `meals.items[]` guarda `grams` por item — é o que permite reusar itens do histórico como atalhos.
 - Dieta prescrita (Pro): o app envia o arquivo para `diet-plans/{uid}/` no Storage (ou o texto colado) e chama `importDietPlan`,
-  que grava o plano em `users/{uid}/diet_plans` (só uma `active`; o app só liga/desliga e apaga). Avisos e "Pela dieta" em `src/lib/diet.ts`.
+  que grava o plano em `users/{uid}/diet_plans` (a nova substitui e apaga as anteriores (dietReplace.ts); o app só liga/desliga e apaga). Avisos e "Pela dieta" em `src/lib/diet.ts`.
 - Pro: `entitlements/{uid}` só o servidor escreve. Recursos pagos em `FEATURES` (`src/lib/pro.ts`); no beta `PRO_OPEN = true`
   em `src/lib/pro.ts` e `functions/src/pro.ts` (mudar os dois juntos).
 - Perfil da paciente (subcoleções de `users/{uid}`): `measurements` (peso/cintura/quadril/pescoço, `created_at` obrigatório), `body_comp` e `lab_reports`
