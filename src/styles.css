@@ -450,3 +450,20 @@ input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; bo
 .meas-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .meas-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .meas-actions { display: flex; gap: 14px; flex: none; }
+
+/* Fotos de evolução */
+.photo-lock { margin: 4px 0 14px; }
+.photo-frame { position: relative; border-radius: 14px; overflow: hidden; background: var(--paper-2); aspect-ratio: 3 / 4; }
+.photo-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.photo-frame img.photo-ghost { opacity: 0.35; pointer-events: none; }
+.photo-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.photo-actions .btn.primary { width: auto; }
+.photo-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.photo-pair figure { margin: 0; }
+.photo-pair img, .photo-tile img { display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 12px; background: var(--paper-2); }
+.photo-pair figcaption { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+.photo-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.photo-grid li { display: grid; gap: 4px; align-content: start; }
+.photo-grid small { font-size: 12px; color: var(--ink-3); }
+.photo-tile { display: block; width: 100%; aspect-ratio: 3 / 4; border-radius: 12px; background: var(--paper-2); overflow: hidden; }
+.photo-grid li.on .photo-tile { outline: 2px solid var(--accent); }

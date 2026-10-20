@@ -6,6 +6,8 @@ import { LineChart } from "@/components/LineChart";
 import { bmi, waistHeight } from "@/lib/health";
 import { changeSince, useMeasurements } from "@/lib/measurements";
 import MeasurementsView, { f1 } from "@/screens/MeasurementsView";
+import PhotosView from "@/screens/PhotosView";
+import { sessions, useBodyPhotos } from "@/lib/photos";
 import Settings from "@/screens/Settings";
 import { ProfileEditSheet } from "@/sheets/ProfileEditSheet";
 
@@ -53,6 +55,9 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet, g
   const [meas, setMeas] = useState<"" | "view" | "add">("");
   const [mv, setMv] = useState(0);
   const list = useMeasurements(version + mv);
+  const [photosOpen, setPhotosOpen] = useState(false);
+  const [pv, setPv] = useState(0);
+  const photos = useBodyPhotos(version + pv);
   const [edit, setEdit] = useState(false);
   const closeEdit = useCallback(() => setEdit(false), []);
   // Os demais cartões abrem os detalhes nas próximas tarefas.
@@ -66,6 +71,13 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet, g
     return (
       <MeasurementsView profile={profile} list={list} startAdding={meas === "add"} onBack={() => setMeas("")}
         onChanged={() => { setMv((n) => n + 1); onSaved(); }} />
+    );
+  }
+
+  if (photosOpen) {
+    return (
+      <PhotosView profile={profile} photos={photos.list} measurements={list} loadErr={photos.err}
+        onBack={() => setPhotosOpen(false)} onChanged={() => setPv((n) => n + 1)} />
     );
   }
 
@@ -129,8 +141,12 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet, g
         <p className="empty">Envie um exame de sangue</p>
       </Card>
       <div className="pcard-pair">
-        <Card label="Fotos" half onOpen={soon}>
-          <p className="empty">Nenhum registro</p>
+        <Card label="Fotos" half onOpen={() => setPhotosOpen(true)}>
+          <button className="pcard-body" onClick={() => setPhotosOpen(true)}>
+            <p className="empty">
+              {photos.list.length ? `${sessions(photos.list, profile.timezone).length} sessões` : "Nenhum registro"} <span aria-hidden>🔒</span>
+            </p>
+          </button>
         </Card>
         <Card label="Sua saúde" half onOpen={soon}>
           <p className="empty">Conte sobre você</p>
