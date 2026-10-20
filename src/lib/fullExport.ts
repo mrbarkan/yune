@@ -30,7 +30,7 @@ export function filePaths(d: FullData, uid: string, includeBody: boolean): strin
   const set = new Set<string>();
   for (const v of found) {
     const s = str(v);
-    if (s && ok.test(s) && !s.includes("..")) set.add(s);
+    if (s && ok.test(s) && !s.split("/").includes("..")) set.add(s);
   }
   return [...set].sort();
 }
@@ -132,6 +132,7 @@ export async function downloadAll(o: {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  // Adiado: no Safari/iOS revogar na hora pode cancelar o download.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
   return { missing: missing.length };
 }

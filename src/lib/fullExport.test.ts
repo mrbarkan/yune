@@ -1,5 +1,20 @@
-import { describe, expect, it } from "vitest";
-import { filePaths, manifest, zipFileName, zipName, type FullData } from "./fullExport";
+import { describe, expect, it, vi } from "vitest";
+const reads: string[] = [];
+vi.mock("firebase/firestore", () => ({
+  getDoc: async () => ({ exists: () => false, data: () => ({ photo_path: "profile-photos/u1/p.jpg" }) }),
+  getDocs: async (name: string) => ({ docs: name === "meals" ? [{ id: "m1", data: () => ({ photo_path: "meal-photos/u1/ok.jpg" }) }, { id: "m2", data: () => ({ photo_path: "meal-photos/u1/bad.jpg" }) }] : [] }),
+}));
+vi.mock("firebase/storage", () => ({
+  ref: (_s: unknown, p: string) => p,
+  getBlob: async (p: string) => { if (p.includes("bad")) throw new Error("x"); return new Blob(["a"]); },
+}));
+vi.mock("./firebase", () => ({
+  auth: { currentUser: { uid: "u1" } }, storage: {},
+  profileDoc: () => "profile", remindersDoc: () => "rem", entitlementsDoc: () => "ent",
+  table: (n: string) => { reads.push(n); return n; },
+  rows: (snap: { docs: { id: string; data: () => object }[] }) => snap.docs.map((d) => ({ ...d.data(), id: d.id })),
+}));
+import { downloadAll, filePaths, manifest, zipFileName, zipName, type FullData } from "./fullExport";
 
 const uid = "u1";
 const data = (c: FullData["collections"], profile: Record<string, unknown> = {}): FullData => ({ profile, reminders: null, entitlements: null, collections: c });
@@ -50,5 +65,21 @@ describe("fullExport", () => {
 
   it("zipFileName usa o dia local (São Paulo perto da meia-noite UTC)", () => {
     expect(zipFileName(new Date("2026-10-20T01:30:00Z"), "America/Sao_Paulo")).toBe("yune-meus-dados-2026-10-19.zip");
+  });
+
+  it("filePaths mantém nomes com .. no meio e descarta segmento ..", () => {
+    const d = data({ meals: [{ photo_path: "meal-photos/u1/a..jpg" }, { photo_path: "meal-photos/u1/.." }] });
+    expect(filePaths(d, uid, false)).toEqual(["meal-photos/u1/a..jpg"]);
+  });
+
+  it("downloadAll não lê body_photos sem a opção e conta arquivos que falharam", async () => {
+    vi.stubGlobal("URL", { createObjectURL: () => "blob:x", revokeObjectURL: () => {} });
+    const a = { click: () => {}, remove: () => {}, href: "", download: "" };
+    vi.stubGlobal("document", { createElement: () => a, body: { appendChild: () => {} } });
+    const r = await downloadAll({ includeBody: false, tz: "America/Sao_Paulo", onProgress: () => {} });
+    expect(reads).not.toContain("body_photos");
+    expect(r.missing).toBe(1);
+    expect(a.download).toMatch(/^yune-meus-dados-/);
+    vi.unstubAllGlobals();
   });
 });
