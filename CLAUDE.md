@@ -15,7 +15,7 @@ PWA de diário de saúde (comida, movimento, água, sono). Todo texto de interfa
   itens próprios em `custom_foods`, histórico em `meals.items`). IA (`estimateFood`, Claude Haiku) só para texto livre, foto do prato e rótulo.
 - `meals.items[]` guarda `grams` por item — é o que permite reusar itens do histórico como atalhos.
 - Dieta prescrita (Pro): o app envia o arquivo para `diet-plans/{uid}/` no Storage (ou o texto colado) e chama `importDietPlan`,
-  que grava o plano em `users/{uid}/diet_plans` (a nova substitui e apaga as anteriores (dietReplace.ts); o app só liga/desliga e apaga). Avisos e "Pela dieta" em `src/lib/diet.ts`.
+  que grava o plano em `users/{uid}/diet_plans` (a nova substitui e apaga as anteriores, em `functions/src/dietReplace.ts`; o app só liga/desliga e apaga). Avisos e "Pela dieta" em `src/lib/diet.ts`.
 - Consentimento da IA: `users/{uid}.ai_consent = { at, version }` (ou ausente/null). `AI_CONSENT_VERSION` igual em `src/lib/consent.ts` e `functions/src/consent.ts`
   (teste de paridade). `estimateFood`, `importDietPlan` e `readHealthDoc` chamam `checkAiConsent` logo após o login e devolvem `{ error, consent: "required" }`.
   No app, `useAiConsent` (`src/lib/useAiConsent.tsx`) envolve cada ação de IA em `ask(...)`; liga/desliga em Ajustes › Leitura por IA.
