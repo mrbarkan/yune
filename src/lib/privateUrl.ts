@@ -27,7 +27,7 @@ export function createUrlCache(d: Deps) {
           done = true;
           if (map.get(path) !== entry) return; // entrada já descartada: não mexe na nova
           if (--entry.refs > 0) return;
-          entry.timer = setTimeout(() => { map.delete(path); entry.url.then(d.revoke, () => {}); }, d.graceMs ?? 60_000);
+          entry.timer = setTimeout(() => { if (map.get(path) === entry) map.delete(path); entry.url.then(d.revoke, () => {}); }, d.graceMs ?? 60_000);
         },
       };
     },

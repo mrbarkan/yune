@@ -118,4 +118,22 @@ describe("createUrlCache", () => {
     expect(deps.revoke).not.toHaveBeenCalled();
     h2.release();
   });
+
+  it("prazo de uma entrada que falhou não despeja a nova", async () => {
+    let fail = true;
+    const { deps, cache } = setup(async () => {
+      if (fail) throw new Error("x");
+      return new Blob(["x"]);
+    });
+    const old = cache.acquire("a");
+    old.release(); // refs 0 ainda carregando: arma o prazo
+    await expect(old.url).rejects.toThrow();
+    fail = false;
+    const fresh = cache.acquire("a");
+    await fresh.url;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(cache.size()).toBe(1);
+    expect(deps.load).toHaveBeenCalledTimes(2);
+    expect(deps.revoke).not.toHaveBeenCalled();
+  });
 });

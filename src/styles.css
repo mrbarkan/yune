@@ -420,6 +420,16 @@ input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; bo
 
 /* ---------- perfil ---------- */
 .private-img { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+
+/* ---------- imagem privada ---------- */
+.private-img.failed { display: inline-block; box-sizing: border-box; min-width: 40px; min-height: 40px; background: var(--line); border-radius: 10px; position: relative; flex: none; }
+.private-img.failed::after { content: "\00d7"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-3); font: 400 18px/1 var(--serif); }
+.private-img.failed.entry-thumb { width: 40px; height: 40px; }
+.private-img.failed.plate-photo { display: block; width: 100%; height: 120px; border-radius: 18px; }
+.entry-detail .private-img.failed { display: block; width: 100%; height: 120px; border-radius: 16px; }
+.avatar .private-img.failed { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 0; background: transparent; }
+.avatar .private-img.failed::after { content: none; }
+.photo-tile .private-img.failed { display: block; width: 100%; height: 100%; min-height: 80px; border-radius: 0; }
 .avatar { position: relative; width: 58px; height: 58px; border-radius: 50%; overflow: hidden; flex: none; display: grid; place-items: center; background: var(--paper-2); border: 1px solid var(--line); color: var(--ink-2); font: 400 26px/1 var(--serif); }
 .avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .avatar.mini { width: 30px; height: 30px; font-size: 16px; }
