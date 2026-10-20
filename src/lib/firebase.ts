@@ -26,7 +26,8 @@ if (import.meta.env.VITE_USE_EMULATORS === "1") {
 }
 
 /** Registros de cada pessoa ficam em users/{uid}/{coleção}. */
-export type Table = "meals" | "activities" | "water" | "sleep" | "custom_foods" | "push_subscriptions" | "diet_plans";
+export type Table = "meals" | "activities" | "water" | "sleep" | "custom_foods" | "push_subscriptions" | "diet_plans"
+  | "measurements" | "body_comp" | "lab_reports" | "body_photos" | "anamnesis";
 
 const uid = () => {
   const u = auth.currentUser;
@@ -87,7 +88,39 @@ export type Profile = {
   timezone: string;
   /** Tamanhos dos botões de água (ml); ausente = DEFAULT_WATER_SIZES. */
   water_sizes?: number[];
+  /** Caminho da foto de perfil no Storage. */
+  photo_path?: string | null;
 };
+
+export type Measurement = {
+  id: string; measured_at: string; weight_kg: number;
+  waist_cm: number | null; hip_cm: number | null; neck_cm: number | null;
+  source: "manual" | "body_comp"; created_at?: string;
+};
+
+export type BodyCompValues = {
+  weight_kg: number | null; fat_pct: number | null; fat_kg: number | null; muscle_kg: number | null;
+  lean_kg: number | null; visceral: number | null; bmr_kcal: number | null; water_l: number | null;
+  ecw_tbw: number | null; phase_angle: number | null;
+};
+
+export type BodyComp = BodyCompValues & {
+  id: string; measured_at: string; device: string; file_path: string | null; ai: boolean; created_at: string;
+};
+
+export type LabResult = {
+  code: string; name: string; value: number | null; value_text: string; unit: string;
+  ref_low: number | null; ref_high: number | null; ref_text: string;
+};
+
+export type LabReport = {
+  id: string; collected_at: string; lab: string | null; results: LabResult[];
+  file_paths: string[]; ai: boolean; created_at: string;
+};
+
+export type Pose = "frente" | "lado" | "costas";
+
+export type BodyPhoto = { id: string; taken_at: string; pose: Pose; path: string; created_at?: string };
 
 export type FoodItem = { name: string; quantity: string; grams: number; kcal: number; protein_g: number; carbs_g: number; fat_g: number };
 
