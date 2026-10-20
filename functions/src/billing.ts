@@ -6,6 +6,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import { defineSecret, defineString } from "firebase-functions/params";
 import { onCall, onRequest } from "firebase-functions/v2/https";
 import Stripe from "stripe";
+import { DELETING_ERROR, isDeleting } from "./deleting.js";
 import { COUNTING, deriveEntitlement, isIncomplete, stripeStateFrom, trialFor, type StripeState, type Trial } from "./entitlement.js";
 import { MOCK_PRICES, mockBillingEnabled, mockCheckout, mockPortalUrl } from "./mockBilling.js";
 import { REGION } from "./region.js";
@@ -137,6 +138,7 @@ export const stripeWebhook = onRequest(
   },
 );
 
+
 const NOT_SIGNED_IN = { error: "Faça login para continuar." };
 
 /**
@@ -148,6 +150,7 @@ export async function startCheckout(
   a: { uid: string; email: string | undefined; plan: keyof typeof PRICES; appUrl: string; now: Date },
 ): Promise<{ url: string } | { error: string }> {
   const { stripe, db } = deps;
+  if (await isDeleting(a.uid, db)) return { error: DELETING_ERROR };
   const billingRef = db.doc(`billing/${a.uid}`);
   let customerId = (await billingRef.get()).get("customer_id") as string | undefined;
   if (customerId) {

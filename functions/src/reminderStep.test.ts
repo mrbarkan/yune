@@ -34,6 +34,30 @@ function deps(over: Partial<Deps> = {}): Deps & { patches: Record<string, unknow
 describe.each(CLOCKS)("processUser com relógio $label", ({ now, hhmm }) => {
   beforeEach(() => { NOW = now; r = mk(hhmm); });
 
+  it("resumo sem números por padrão", async () => {
+    const payloads: unknown[] = [];
+    const totalsSpy = vi.fn(async () => totals);
+    const d = deps({ totals: totalsSpy, push: async (_s, p) => { payloads.push(p); } });
+    await processUser("u", { ...r, bedtime_enabled: false }, d);
+    expect(payloads).toEqual([{ title: "Seu resumo do dia está pronto", body: "Toque para ver no Yune.", tag: "summary" }]);
+    expect(totalsSpy).not.toHaveBeenCalled();
+  });
+
+  it("água sem números por padrão", async () => {
+    const payloads: unknown[] = [];
+    const d = deps({ push: async (_s, p) => { payloads.push(p); } });
+    await processUser("u", { ...r, summary_enabled: false, bedtime_enabled: false, water_enabled: true }, d);
+    expect(payloads).toEqual([{ title: "Um copo d'água?", body: "Hora de se hidratar.", tag: "water" }]);
+  });
+
+  it("push_details true mantém os números", async () => {
+    const payloads: { title: string; body: string; tag: string }[] = [];
+    const d = deps({ push: async (_s, p) => { payloads.push(p); } });
+    await processUser("u", { ...r, push_details: true, bedtime_enabled: false, water_enabled: true }, d);
+    expect(payloads.find((p) => p.tag === "summary")?.title).toBe("Seu dia: 1 kcal líquidas");
+    expect(payloads.find((p) => p.tag === "water")?.body).toBe("Meta de hoje: 2 L.");
+  });
+
   it("usa só as 5 assinaturas mais novas", async () => {
     const many = [1, 2, 3, 4, 5, 6, 7].map(sub);
     const d = deps({ subs: async () => many });

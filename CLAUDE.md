@@ -9,18 +9,22 @@ PWA de diário de saúde (comida, movimento, água, sono). Todo texto de interfa
   perfil em `users/{uid}`, lembretes em `reminders/{uid}`. Datas são strings ISO em UTC. Regras em `firestore.rules` / `storage.rules`.
 - Cloud Functions em `functions/src` (Node 22): `estimateFood` é callable e devolve sempre um objeto (resultado ou `{ error }`).
 - Sono pertence ao dia em que se acorda; registro aberto (`wake_at` nulo) = dormindo agora.
-- Push: `public/sw.js` recebe; `functions/src/sendReminders.ts` envia (Web Push/VAPID, agendada a cada 5 min).
+- Push: `public/sw.js` recebe; `functions/src/sendReminders.ts` envia (Web Push/VAPID, agendada a cada 5 min); `reminders.push_details` (padrão false): sem números na tela bloqueada.
 - Comida: busca local primeiro (`src/lib/foods.ts`: TACO em `src/data/taco.json`, itens do dia a dia que a TACO não tem em
   `src/data/common.json`, suplementos em `src/data/supplements.json`,
   itens próprios em `custom_foods`, histórico em `meals.items`). IA (`estimateFood`, Claude Haiku) só para texto livre, foto do prato e rótulo.
 - `meals.items[]` guarda `grams` por item — é o que permite reusar itens do histórico como atalhos.
 - Dieta prescrita (Pro): o app envia o arquivo para `diet-plans/{uid}/` no Storage (ou o texto colado) e chama `importDietPlan`,
-  que grava o plano em `users/{uid}/diet_plans` (só uma `active`; o app só liga/desliga e apaga). Avisos e "Pela dieta" em `src/lib/diet.ts`.
+  que grava o plano em `users/{uid}/diet_plans` (a nova substitui e apaga as anteriores, em `functions/src/dietReplace.ts`; o app só liga/desliga e apaga). Avisos e "Pela dieta" em `src/lib/diet.ts`.
+- Consentimento da IA: `users/{uid}.ai_consent = { at, version }` (ou ausente/null). `AI_CONSENT_VERSION` igual em `src/lib/consent.ts` e `functions/src/consent.ts`
+  (teste de paridade). `estimateFood`, `importDietPlan` e `readHealthDoc` chamam `checkAiConsent` logo após o login e devolvem `{ error, consent: "required" }`.
+  No app, `useAiConsent` (`src/lib/useAiConsent.tsx`) envolve cada ação de IA em `ask(...)`; liga/desliga em Ajustes › Leitura por IA.
 - Pro: `entitlements/{uid}` só o servidor escreve. Recursos pagos em `FEATURES` (`src/lib/pro.ts`); no beta `PRO_OPEN = true`
   em `src/lib/pro.ts` e `functions/src/pro.ts` (mudar os dois juntos).
 - Perfil da paciente (subcoleções de `users/{uid}`): `measurements` (peso/cintura/quadril/pescoço, `created_at` obrigatório), `body_comp` e `lab_reports`
   (só leitura/apagar pelo app; o servidor grava), `body_photos`, `anamnesis/{AAAA-MM-DD}` (`{ updated_at, answers }`, chaves de `SECTIONS` em
   `src/lib/anamnesis.ts`; mesmo dia sobrescreve, outro dia cria versão). Storage: `profile-photos/{uid}`, `body-photos/{uid}/…`, `health-docs/{uid}/…`.
+- Baixar meus dados (grátis): `src/lib/fullExport.ts` monta o .zip no aparelho (fflate; `dados.json` + `LEIA-ME.txt` + originais do Storage via `getBlob`, em `arquivos/`). Fotos do corpo só se a pessoa marcar; `push_subscriptions` nunca entra.
 - Bioimpedância e exames (Pro): o app envia a foto/PDF para `health-docs/{uid}/`, chama `readHealthDoc` (devolve rascunho para conferir; nada é salvo)
   e depois `saveHealthDoc` (valida e grava em `body_comp` / `lab_reports`). Catálogo de exames em `src/data/labs.json` = `functions/src/labCodes.ts`.
 - Stripe (cartão, BRL): functions `createCheckout`, `createPortal`, `getProPrices`, `stripeWebhook` (`functions/src/billing.ts`). Segredos
@@ -47,3 +51,7 @@ PWA de diário de saúde (comida, movimento, água, sono). Todo texto de interfa
 - Beta: `npm --prefix functions run grant-beta -- --days 30 --apply [--project <id>]` grava `beta_until` de todos (pula quem já tem beta mais longo;
   mantém `stripe`). `--apply` é obrigatório para gravar; sem ele é só simulação (dry-run). `--days` de 1 a 90. Fora do emulador exige `--project`.
   Encerrar o beta = rodar o grant-beta (para dar o prazo final) e, num mesmo release, pôr `PRO_OPEN = false` em `src/lib/pro.ts` e `functions/src/pro.ts`.
+- Apagar conta (`deleteAccount`, callable com `STRIPE_SECRET_KEY`): exige `confirm: "APAGAR"` e login recente (`auth_time` até 10 min; senha: o app reautentica logo antes; Google/Apple: login recente ou popup; o servidor decide).
+  Ordem: apaga o customer na Stripe (cancela as assinaturas na hora; se falhar, nada mais é apagado), depois grava a trava `deleting/{uid}` (tombstone `{ at }`, só do servidor, nunca apagada: bloqueia escritas de tokens antigos que sobrevivem ao `deleteUser` por até ~1 h; regras: `owner()` nega escrita enquanto ela existe, Storage usa `firestore.exists` no `create`; deploy: as regras de Storage entre serviços exigem que a conta de serviço do Cloud Storage tenha o papel "Firebase Rules Firestore Service Agent" (`roles/firebaserules.firestoreServiceAgent`), que o firebase CLI concede ao implantar; cada escrita/envio do app custa uma leitura extra cobrada. As callables que gravam dados da pessoa (Admin SDK ignora regras) conferem a trava com `isDeleting` (`functions/src/deleting.ts`) e devolvem `{ error }`; `importDietPlan` confere de novo na transação que salva (a leitura da IA leva minutos); sobra uma corrida mínima (gravação já em curso quando a trava é gravada), aceita. Se algo falhar depois da trava, o erro diz que a exclusão começou e a conta fica só leitura até nova tentativa), depois arquivos em `STORAGE_PREFIXES` (`meal-photos`, `profile-photos`, `body-photos`, `health-docs`, `diet-plans`
+  com `/{uid}/`), `users/{uid}` (recursivo), `reminders`, `entitlements`, `billing`, `ai_usage` e por fim o usuário do Auth. No modo de cobrança simulada o `deleteCustomer` é no-op.
+  Depois de apagar, o webhook registra "customer sem uid" nos eventos `subscription.deleted` do customer removido: esperado.

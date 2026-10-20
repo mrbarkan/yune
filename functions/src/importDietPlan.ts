@@ -2,12 +2,16 @@
 // Recurso Pro (ver pro.ts). Usa o mesmo segredo ANTHROPIC_API_KEY de estimateFood.
 import Anthropic from "@anthropic-ai/sdk";
 import { getFirestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import { defineSecret } from "firebase-functions/params";
 import { onCall } from "firebase-functions/v2/https";
+import { AI_CONSENT_ERROR, checkAiConsent } from "./consent.js";
 import { clipPlan } from "./dietClip.js";
+import { activation, replaceDiets } from "./dietReplace.js";
 import { fileContent } from "./files.js";
 import { isPro } from "./pro.js";
 import { REGION } from "./region.js";
+import { DELETING_ERROR, isDeleting } from "./deleting.js";
 import { bumpUsage } from "./usage.js";
 
 const ANTHROPIC_API_KEY = defineSecret("ANTHROPIC_API_KEY");
@@ -144,6 +148,8 @@ export const importDietPlan = onCall(
   async (req) => {
     if (!req.auth || req.auth.token.email_verified !== true) return { error: "Faça login para continuar." };
     const uid = req.auth.uid;
+    if (await isDeleting(uid)) return { error: DELETING_ERROR };
+    if (!(await checkAiConsent(uid))) return { error: AI_CONSENT_ERROR, consent: "required" };
     if (!(await isPro(uid))) return { error: "A dieta do nutricionista é um recurso Pro." };
 
     const body = (req.data ?? {}) as Record<string, unknown>;
@@ -188,21 +194,44 @@ export const importDietPlan = onCall(
     unclipped.rules = plan.rules.map((r) => ({ ...r, keywords: [...new Set(r.keywords.map(fold).filter(Boolean))].slice(0, 12) }));
     const rest = clipPlan(unclipped);
 
-    // Só uma dieta ativa por vez; as anteriores ficam guardadas.
+    // A dieta nova substitui as anteriores (documento e arquivo): ver dietReplace.ts.
     const db = getFirestore();
     const col = db.collection(`users/${uid}/diet_plans`);
-    const active = await col.where("active", "==", true).get();
-    const ref = col.doc();
-    const batch = db.batch();
-    active.docs.forEach((d) => batch.update(d.ref, { active: false }));
-    batch.set(ref, {
-      ...rest,
-      active: true,
-      file_path: path,
-      file_name: path ? fileName : null,
-      created_at: new Date().toISOString(),
-    });
-    await batch.commit();
-    return { id: ref.id };
+    let id: string;
+    try {
+      id = await replaceDiets(
+        {
+          list: async () => (await col.get()).docs.map((d) => ({
+            id: d.id, file_path: (d.get("file_path") as string | null) ?? null, created_at: (d.get("created_at") as string | null) ?? null,
+          })),
+          newId: () => col.doc().id,
+          save: (docId, data) => db.runTransaction(async (tx) => {
+            // A leitura da IA pode levar minutos: confere a trava de exclusão de novo, dentro da transação.
+            if ((await tx.get(db.doc(`deleting/${uid}`))).exists) throw new Error(DELETING_ERROR);
+            const active = await tx.get(col.where("active", "==", true));
+            const plan = activation(
+              { id: docId, created_at: data.created_at as string },
+              active.docs.map((d) => ({ id: d.id, created_at: (d.get("created_at") as string | null) ?? null })),
+            );
+            plan.deactivate.forEach((x) => tx.update(col.doc(x), { active: false }));
+            tx.set(col.doc(docId), { ...data, active: plan.active });
+          }),
+          remove: async (docId) => void (await col.doc(docId).delete()),
+          deactivate: async (docId) => void (await col.doc(docId).update({ active: false })),
+          deleteFile: async (p) => void (await getStorage().bucket().file(p).delete({ ignoreNotFound: true })),
+        },
+        {
+          ...rest,
+          file_path: path,
+          file_name: path ? fileName : null,
+          created_at: new Date().toISOString(),
+        },
+      );
+    } catch (err) {
+      if (err instanceof Error && err.message === DELETING_ERROR) return { error: DELETING_ERROR };
+      console.error("importDietPlan: salvar", err instanceof Error ? err.name : "erro");
+      return { error: "Falha ao salvar a dieta. Tente de novo." };
+    }
+    return { id };
   },
 );

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AboutSheet } from "@/sheets/AboutSheet";
+import { AccountSection } from "@/components/AccountSection";
 import { suggestedGoal } from "@/lib/activity";
 import { disablePush, disablePushQuietly, enablePush, isIOS, pushState, type PushState } from "@/lib/push";
 import { signOut } from "firebase/auth";
@@ -12,6 +13,7 @@ import {
 } from "@/lib/firebase";
 import { fmtLiters, fmtNum } from "@/lib/time";
 import { goalsValid } from "@/lib/profileDefaults";
+import { grantAiConsent, markAiConsentRequired, resetAiConsentSession, revokeAiConsent, useAiConsent, useAiConsentOn } from "@/lib/useAiConsent";
 import { PRO_OPEN, proStatus, proStatusLine } from "@/lib/pro";
 
 type DietProps = { allowed: boolean; plan: DietPlan | null; onOpen: () => void; onChanged: () => void };
@@ -107,11 +109,13 @@ export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }:
 
       <ProSection ent={ent} tz={p.timezone} onPro={onPro} />
 
-      <DietSection {...diet} profile={p} onGoals={async (goals) => {
+      <DietSection {...diet} profile={p} onProfile={onSaved} onGoals={async (goals) => {
         const next = { ...p, ...goals };
         setP(next);
         await updateDoc(profileDoc(next.id), { kcal_goal: next.kcal_goal, water_goal_ml: next.water_goal_ml }).then(onSaved, () => setMsg("Confira os valores e tente de novo."));
       }} />
+
+      <AiSection profile={p} onSaved={onSaved} />
 
       <section className="group">
         <h2 className="section-title">Notificações</h2>
@@ -159,14 +163,17 @@ export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }:
               <label className="field"><span>Lembrar às</span>
                 <input type="time" value={r.bedtime_time.slice(0, 5)} onChange={(e) => saveReminders({ ...r, bedtime_time: e.target.value })} /></label>
             )}
+            <Toggle label="Mostrar números nas notificações" on={r.push_details} onChange={(v) => saveReminders({ ...r, push_details: v })} />
+            <p className="note">Desligado, a notificação não mostra calorias nem metas na tela bloqueada.</p>
           </div>
         )}
       </section>
 
       <ExportSection profile={p} />
+      <AccountSection />
 
       <section className="group">
-        <button className="btn ghost" disabled={leaving} onClick={async () => { setLeaving(true); try { await disablePushQuietly(); await signOut(auth); } finally { setLeaving(false); } }}>
+        <button className="btn ghost" disabled={leaving} onClick={async () => { setLeaving(true); try { await disablePushQuietly(); resetAiConsentSession(); await signOut(auth); } finally { setLeaving(false); } }}>
           {leaving ? "Saindo…" : "Sair"}
         </button>
         <button className="link" onClick={() => setAbout(true)}>Sobre o Yune</button>
@@ -208,12 +215,16 @@ function ProSection({ ent, tz, onPro }: { ent: Entitlements; tz: string; onPro: 
 }
 
 function ExportSection({ profile }: { profile: Profile }) {
-  const [busy, setBusy] = useState<"xlsx" | "pdf" | null>(null);
+  const [busy, setBusy] = useState<"xlsx" | "pdf" | "zip" | null>(null);
   const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
+  const [body, setBody] = useState(false);
+  const [prog, setProg] = useState<[number, number]>([0, 0]);
 
   async function run(kind: "xlsx" | "pdf") {
     setBusy(kind);
     setErr("");
+    setNote("");
     try {
       // Carregado só aqui: o código de exportação fica fora do pacote principal.
       const { downloadPdf, downloadXlsx, exportFileName, exportTables, loadExportData } = await import("@/lib/export");
@@ -230,14 +241,34 @@ function ExportSection({ profile }: { profile: Profile }) {
     }
   }
 
+  async function runZip() {
+    setBusy("zip");
+    setErr("");
+    setNote("");
+    setProg([0, 0]);
+    try {
+      const { downloadAll } = await import("@/lib/fullExport");
+      const { missing } = await downloadAll({ includeBody: body, tz: profile.timezone, onProgress: (d, t) => setProg([d, t]) });
+      if (missing > 0) setNote(`Pronto. ${missing} arquivo(s) não puderam ser baixados; veja arquivos_faltando em dados.json.`);
+    } catch (e) {
+      console.error("fullExport", e);
+      setErr("Não foi possível baixar agora. Tente de novo.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <section className="group">
       <h2 className="section-title">Seus dados</h2>
-      <p className="note">Baixe tudo o que você registrou. As fotos do corpo não entram: elas ficam só no app.</p>
+      <p className="note">Baixe tudo o que você registrou. A planilha e o PDF trazem os registros; o arquivo .zip traz também as fotos e documentos originais.</p>
       <div className="row">
         <button className="btn ghost" disabled={!!busy} onClick={() => run("xlsx")}>{busy === "xlsx" ? "Gerando…" : "Planilha (Excel)"}</button>
         <button className="btn ghost" disabled={!!busy} onClick={() => run("pdf")}>{busy === "pdf" ? "Gerando…" : "PDF"}</button>
       </div>
+      <Toggle label="Incluir fotos do corpo" on={body} onChange={setBody} />
+      <button className="btn ghost" disabled={!!busy} onClick={runZip}>{busy === "zip" ? (prog[1] ? `Baixando arquivos ${prog[0]}/${prog[1]}…` : "Preparando…") : "Baixar tudo (.zip)"}</button>
+      {note && <p className="note">{note}</p>}
       {err && <p className="note err">{err}</p>}
     </section>
   );
@@ -256,8 +287,9 @@ function fileType(f: File) {
   return null;
 }
 
-function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: DietProps & {
+function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals, onProfile }: DietProps & {
   profile: Profile;
+  onProfile: () => void;
   onGoals: (g: Pick<Profile, "kcal_goal" | "water_goal_ml">) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
@@ -265,6 +297,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
   const [paste, setPaste] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  const consent = useAiConsent(profile, onProfile);
 
   if (!allowed && !plan) {
     return (
@@ -275,11 +308,16 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
     );
   }
 
-  async function run(body: Parameters<typeof importDietPlan>[0], uploaded?: string) {
+  async function run(body: Parameters<typeof importDietPlan>[0], retry: () => void, uploaded?: string) {
     const res = await importDietPlan(body);
-    if (res.error) {
+    if (res.error || res.consent) {
       if (uploaded) await deleteObject(ref(storage, uploaded)).catch(() => {});
-      setMsg({ kind: "err", text: res.error });
+      if (res.consent === "required") {
+        markAiConsentRequired(profile.id);
+        consent.ask(retry);
+        return;
+      }
+      setMsg({ kind: "err", text: res.error ?? "Não foi possível ler a dieta agora." });
       return;
     }
     setPaste(null);
@@ -293,6 +331,11 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
     if (/\.doc$/i.test(f.name)) return setMsg({ kind: "err", text: "Arquivo .doc antigo: salve como PDF ou .docx e envie de novo." });
     const kind = fileType(f);
     if (!kind) return setMsg({ kind: "err", text: "Use PDF, Word (.docx), texto ou foto." });
+    consent.ask(() => send(f, kind));
+  }
+
+  async function send(f: File, kind: NonNullable<ReturnType<typeof fileType>>) {
+    setMsg(null);
     setBusy(true);
     try {
       // Foto: reduz mantendo o texto legível.
@@ -300,7 +343,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
       if (blob.size > 10 * 1024 * 1024) throw new Error("Arquivo grande demais (máx. 10 MB).");
       const path = `diet-plans/${profile.id}/${crypto.randomUUID()}.${kind.ext}`;
       await uploadBytes(ref(storage, path), blob, { contentType: kind.type });
-      await run({ path, name: f.name }, path);
+      await run({ path, name: f.name }, () => send(f, kind), path);
     } catch (e) {
       setMsg({ kind: "err", text: (e as Error).message || "Não foi possível enviar." });
     } finally {
@@ -311,7 +354,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
   async function fromText() {
     setBusy(true);
     setMsg(null);
-    await run({ text: paste ?? "" });
+    await run({ text: paste ?? "" }, fromText);
     setBusy(false);
   }
 
@@ -348,7 +391,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
         <p className="note">Seu plano continua aqui. Para enviar uma nova dieta, assine o Pro.</p>
         {confirm ? (
           <div className="row">
-            <p className="note">Apaga também as dietas anteriores guardadas.</p>
+            <p className="note">Apaga a dieta e o arquivo enviado.</p>
             <button className="btn ghost" onClick={() => setConfirm(false)}>Manter</button>
             <button className="btn danger" onClick={remove}>Apagar dieta</button>
           </div>
@@ -390,7 +433,7 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
             <textarea rows={8} value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Cole aqui a dieta como recebeu" /></label>
           <div className="row">
             <button className="btn ghost" onClick={() => setPaste(null)}>Cancelar</button>
-            <button className="btn primary" disabled={paste.trim().length < 20} onClick={fromText}>Ler dieta</button>
+            <button className="btn primary" disabled={paste.trim().length < 20} onClick={() => consent.ask(fromText)}>Ler dieta</button>
           </div>
         </>
       ) : (
@@ -399,10 +442,11 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
           <button className="btn ghost" onClick={() => setPaste("")}>Colar texto</button>
         </div>
       )}
+      {plan && <p className="note">A dieta nova substitui a atual, que é apagada.</p>}
 
       {plan && !busy && (confirm ? (
         <div className="row">
-          <p className="note">Apaga também as dietas anteriores guardadas.</p>
+          <p className="note">Apaga a dieta e o arquivo enviado.</p>
           <button className="btn ghost" onClick={() => setConfirm(false)}>Manter</button>
           <button className="btn danger" onClick={remove}>Apagar dieta</button>
         </div>
@@ -410,15 +454,44 @@ function DietSection({ allowed, plan, onOpen, onChanged, profile, onGoals }: Die
         <button className="link" onClick={() => setConfirm(true)}>Remover dieta</button>
       ))}
       {msg && <p className={`note ${msg.kind}`}>{msg.text}</p>}
+      {consent.sheet}
     </section>
   );
 }
 
-function Toggle({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
+function AiSection({ profile, onSaved }: { profile: Profile; onSaved: () => void }) {
+  const on = useAiConsentOn(profile);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function change(v: boolean) {
+    setErr("");
+    setBusy(true);
+    try {
+      await (v ? grantAiConsent(profile.id) : revokeAiConsent(profile.id));
+      onSaved();
+    } catch {
+      setErr("Não foi possível salvar agora. Tente de novo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="group">
+      <h2 className="section-title">Leitura por IA</h2>
+      <Toggle label="Permitir que a IA leia o que eu enviar" on={on} disabled={busy} onChange={change} />
+      <p className="note">Textos, fotos de pratos e rótulos, dietas e exames vão para a Anthropic (EUA) só quando você envia.</p>
+      {err && <p className="note err">{err}</p>}
+    </section>
+  );
+}
+
+function Toggle({ label, on, onChange, disabled }: { label: string; on: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <label className="toggle">
       <span>{label}</span>
-      <input type="checkbox" role="switch" checked={on} onChange={(e) => onChange(e.target.checked)} />
+      <input type="checkbox" role="switch" checked={on} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       <i aria-hidden />
     </label>
   );

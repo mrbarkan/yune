@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { afterAll, beforeAll, beforeEach, describe, it, vi } from "vitest";
-import { doc, getDoc, getDocs, collection, setDoc, updateDoc, setLogLevel } from "firebase/firestore";
+import { doc, getDoc, getDocs, collection, setDoc, updateDoc, deleteDoc, setLogLevel } from "firebase/firestore";
 import { SECTIONS } from "../../src/lib/anamnesis";
 import { DEFAULT_REMINDERS } from "../../src/lib/defaults";
 
@@ -53,6 +53,13 @@ describe("regras: dados", () => {
     await ok("https://updates.push.services.mozilla.com/wpush/v2/gAAAAABk-token", "b".repeat(64));
     await ok("https://web.push.apple.com/QGxyz123token", "c".repeat(64));
     await ok("https://wns2-par02p.notify.windows.com/w/?token=BQYAAAAbc", "d".repeat(64));
+  });
+
+  it("reminders: push_details é booleano opcional", async () => {
+    await assertSucceeds(setDoc(doc(alice(), "reminders/alice"), { ...DEFAULT_REMINDERS, push_details: true }));
+    await assertFails(setDoc(doc(alice(), "reminders/alice"), { ...DEFAULT_REMINDERS, push_details: "sim" }));
+    const semChave = Object.fromEntries(Object.entries(DEFAULT_REMINDERS).filter(([k]) => k !== "push_details"));
+    await assertSucceeds(setDoc(doc(alice(), "reminders/alice"), semChave));
   });
 
   it("reminders: campos last_* são do servidor", async () => {
@@ -108,5 +115,45 @@ describe("regras: dados", () => {
     await seed("users/alice/meals/m1", { description: "x" });
     await assertFails(getDoc(doc(bob(), "users/alice/meals/m1")));
     await assertFails(setDoc(doc(bob(), "users/alice/meals/m2"), { description: "y" }));
+  });
+});
+
+describe("regras: trava de exclusão (deleting/{uid})", () => {
+  const meal = { eaten_at: NOW, description: "Arroz", kcal: 200, source: "manual", place: "casa", created_at: NOW };
+  const profile = { kcal_goal: 2000, water_goal_ml: 2000, sleep_goal_min: 480, timezone: "America/Sao_Paulo" };
+
+  beforeEach(async () => {
+    await seed("users/alice", profile);
+    await seed("users/alice/meals/m1", meal);
+    await seed("reminders/alice", { ...DEFAULT_REMINDERS });
+    await seed("deleting/alice", { at: NOW });
+  });
+
+  it("com a trava, a pessoa ainda lê", async () => {
+    await assertSucceeds(getDoc(doc(alice(), "users/alice")));
+    await assertSucceeds(getDoc(doc(alice(), "users/alice/meals/m1")));
+    await assertSucceeds(getDocs(collection(alice(), "users/alice/meals")));
+  });
+  it("com a trava, não cria, atualiza nem apaga", async () => {
+    await assertFails(setDoc(doc(alice(), "users/alice/meals/m2"), meal));
+    await assertFails(updateDoc(doc(alice(), "users/alice"), { kcal_goal: 1900 }));
+    await assertFails(setDoc(doc(alice(), "reminders/alice"), { ...DEFAULT_REMINDERS }));
+    await assertFails(deleteDoc(doc(alice(), "users/alice/meals/m1")));
+  });
+  it("sem a trava tudo segue como antes", async () => {
+    await env.withSecurityRulesDisabled((ctx) => deleteDoc(doc(ctx.firestore(), "deleting/alice")));
+    await assertSucceeds(setDoc(doc(alice(), "users/alice/meals/m2"), meal));
+    await assertSucceeds(updateDoc(doc(alice(), "users/alice"), { kcal_goal: 1900 }));
+    await assertSucceeds(deleteDoc(doc(alice(), "users/alice/meals/m1")));
+  });
+  it("a trava de uma pessoa não afeta outra", async () => {
+    await assertSucceeds(setDoc(doc(bob(), "users/bob/meals/m1"), meal));
+  });
+  it("o app não lê nem grava deleting/{uid}", async () => {
+    await assertFails(getDoc(doc(alice(), "deleting/alice")));
+    await assertFails(setDoc(doc(alice(), "deleting/alice"), { at: NOW }));
+    await assertFails(deleteDoc(doc(alice(), "deleting/alice")));
+    await env.withSecurityRulesDisabled((ctx) => deleteDoc(doc(ctx.firestore(), "deleting/alice")));
+    await assertFails(setDoc(doc(alice(), "deleting/alice"), { at: NOW }));
   });
 });

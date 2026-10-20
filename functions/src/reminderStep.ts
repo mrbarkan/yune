@@ -10,6 +10,8 @@ export type Reminders = {
   summary_time: string;
   bedtime_enabled: boolean;
   bedtime_time: string;
+  /** Mostra calorias e metas nas notificações (padrão false: tela bloqueada sem números). */
+  push_details?: boolean;
   last_water_at?: string | null;
   last_summary_date?: string | null;
   last_bedtime_date?: string | null;
@@ -75,15 +77,15 @@ export async function processUser(uid: string, r: Reminders, d: Deps): Promise<n
 
   // Resumo do dia
   if (r.summary_enabled && r.last_summary_date !== local.date && local.minutes >= toMin(r.summary_time)) {
-    const t = await d.totals(uid, tz, local.date);
-    const net = t.kcal_in - t.kcal_out;
-    const parts = [`${fmt(t.kcal_in)} kcal ingeridas`, `${fmt(t.kcal_out)} gastas`, liters(t.water_ml)];
-    if (t.sleep_min) parts.push(`dormiu ${hm(t.sleep_min)}`);
-    sent += await send({
-      title: `Seu dia: ${fmt(net)} kcal líquidas`,
-      body: parts.join(" · ") + ` — meta ${fmt(profile.kcal_goal)} kcal.`,
-      tag: "summary",
-    });
+    let payload: Payload = { title: "Seu resumo do dia está pronto", body: "Toque para ver no Yune.", tag: "summary" };
+    if (r.push_details === true) {
+      const t = await d.totals(uid, tz, local.date);
+      const net = t.kcal_in - t.kcal_out;
+      const parts = [`${fmt(t.kcal_in)} kcal ingeridas`, `${fmt(t.kcal_out)} gastas`, liters(t.water_ml)];
+      if (t.sleep_min) parts.push(`dormiu ${hm(t.sleep_min)}`);
+      payload = { title: `Seu dia: ${fmt(net)} kcal líquidas`, body: parts.join(" · ") + ` — meta ${fmt(profile.kcal_goal)} kcal.`, tag: "summary" };
+    }
+    sent += await send(payload);
     await d.patch(uid, { last_summary_date: local.date });
   }
 
@@ -99,7 +101,8 @@ export async function processUser(uid: string, r: Reminders, d: Deps): Promise<n
   const since = new Date(d.now.getTime() - r.water_every_min * 60_000);
   if (r.water_enabled && inWindow && (!r.last_water_at || new Date(r.last_water_at) < since)) {
     if (!(await d.hasWaterSince(uid, since.toISOString()))) {
-      sent += await send({ title: "Um copo d'água?", body: `Meta de hoje: ${liters(profile.water_goal_ml)}.`, tag: "water" });
+      const body = r.push_details === true ? `Meta de hoje: ${liters(profile.water_goal_ml)}.` : "Hora de se hidratar.";
+      sent += await send({ title: "Um copo d'água?", body, tag: "water" });
       await d.patch(uid, { last_water_at: d.now.toISOString() });
     }
   }

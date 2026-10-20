@@ -125,6 +125,7 @@ describe("pdfText", () => {
   it("mantém Latin-1 e tira o que a fonte não tem", () => {
     expect(pdfText("Ação 5 µg/m² — ok 😀")).toBe("Ação 5 µg/m² — ok ");
     expect(pdfText(null)).toBe("");
-    expect(pdfText(12.5)).toBe("12.5");
+    expect(pdfText(12.5)).toBe("12,5");
+    expect(pdfText(1990)).toBe("1990");
   });
 });

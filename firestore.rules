@@ -4,8 +4,11 @@ rules_version = '2';
 // Registros em users/{uid}/{coleção}; datas são strings ISO em UTC (new Date().toISOString()).
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Escritas só enquanto não existe a trava deleting/{uid} (criada por deleteAccount): um token antigo, de outro
+    // aparelho, segue válido até ~1 h depois do deleteUser e não pode recriar dados. Leituras continuam.
     function owner(uid) {
-      return request.auth != null && request.auth.uid == uid && request.auth.token.email_verified == true;
+      return request.auth != null && request.auth.uid == uid && request.auth.token.email_verified == true
+        && (request.method in ['get', 'list'] || !exists(/databases/$(database)/documents/deleting/$(uid)));
     }
     function d() { return request.resource.data; }
     function iso(v) { return v is string && v.matches('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$'); }
@@ -16,7 +19,7 @@ service cloud.firestore {
 
     function validProfile(uid) {
       return d().keys().hasOnly(['name', 'sex', 'birth_year', 'height_cm', 'weight_kg', 'kcal_goal', 'water_goal_ml', 'sleep_goal_min', 'timezone',
-          'water_sizes', 'photo_path'])
+          'water_sizes', 'photo_path', 'ai_consent'])
         && (d().get('name', null) == null || text(d().name, 0, 80))
         && d().get('sex', null) in [null, 'f', 'm']
         && optNum(d().get('birth_year', null), 1900, 2100)
@@ -27,7 +30,9 @@ service cloud.firestore {
         && num(d().sleep_goal_min, 180, 720)
         && text(d().timezone, 1, 64)
         && (d().get('water_sizes', null) == null || validWaterSizes(d().water_sizes))
-        && (d().get('photo_path', null) == null || d().photo_path.matches('^profile-photos/' + uid + '/[^/]+$'));
+        && (d().get('photo_path', null) == null || d().photo_path.matches('^profile-photos/' + uid + '/[^/]+$'))
+        && (d().get('ai_consent', null) == null || (d().ai_consent.keys().hasOnly(['at', 'version']) && iso(d().ai_consent.at)
+          && d().ai_consent.version is int && num(d().ai_consent.version, 1, 100)));
     }
 
     // Os quatro botões de água da folha Água (ml).
@@ -39,8 +44,9 @@ service cloud.firestore {
 
     function validReminders() {
       return d().keys().hasOnly(['water_enabled', 'water_every_min', 'water_start', 'water_end', 'summary_enabled', 'summary_time',
-          'bedtime_enabled', 'bedtime_time', 'last_water_at', 'last_summary_date', 'last_bedtime_date'])
+          'bedtime_enabled', 'bedtime_time', 'push_details', 'last_water_at', 'last_summary_date', 'last_bedtime_date'])
         && d().water_enabled is bool && d().summary_enabled is bool && d().bedtime_enabled is bool
+        && (!d().keys().hasAny(['push_details']) || d().push_details is bool)
         && num(d().water_every_min, 30, 480)
         && hhmm(d().water_start) && hhmm(d().water_end) && hhmm(d().summary_time) && hhmm(d().bedtime_time);
     }
@@ -172,6 +178,11 @@ service cloud.firestore {
 
     // Cobrança (Stripe): sem acesso do cliente, só as Cloud Functions.
     match /billing/{uid} {
+      allow read, write: if false;
+    }
+
+    // Trava de exclusão: { at }. Só o servidor grava (deleteAccount); fica depois da exclusão de propósito.
+    match /deleting/{uid} {
       allow read, write: if false;
     }
 

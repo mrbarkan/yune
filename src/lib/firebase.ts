@@ -44,20 +44,20 @@ export const entitlementsDoc = (id: string) => doc(db, "entitlements", id);
 export const rows = <T,>(snap: QuerySnapshot) => snap.docs.map((d) => ({ ...d.data(), id: d.id }) as T);
 
 /** Chama a função estimate-food. Como nas outras funções, erros voltam como `{ error }`. */
-export async function estimateFood<T>(body: unknown): Promise<T & { error?: string }> {
+export async function estimateFood<T>(body: unknown): Promise<T & { error?: string; consent?: "required" }> {
   try {
     const res = await httpsCallable(functions, "estimateFood")(body);
-    return res.data as T & { error?: string };
+    return res.data as T & { error?: string; consent?: "required" };
   } catch {
-    return { error: "Não foi possível calcular agora." } as T & { error?: string };
+    return { error: "Não foi possível calcular agora." } as T & { error?: string; consent?: "required" };
   }
 }
 
 /** Lê a dieta enviada (arquivo no Storage ou texto colado). Pode levar até um minuto. */
-export async function importDietPlan(body: { path: string; name: string } | { text: string }): Promise<{ id?: string; error?: string }> {
+export async function importDietPlan(body: { path: string; name: string } | { text: string }): Promise<{ id?: string; error?: string; consent?: "required" }> {
   try {
     const res = await httpsCallable(functions, "importDietPlan", { timeout: 300_000 })(body);
-    return res.data as { id?: string; error?: string };
+    return res.data as { id?: string; error?: string; consent?: "required" };
   } catch {
     return { error: "Não foi possível ler a dieta agora." };
   }
@@ -82,6 +82,8 @@ export type Profile = {
   water_sizes?: number[];
   /** Caminho da foto de perfil no Storage. */
   photo_path?: string | null;
+  /** Autorização para enviar dados à IA (Anthropic); ausente/null = não autorizou. */
+  ai_consent?: { at: string; version: number } | null;
 };
 
 export type Measurement = {
@@ -117,10 +119,10 @@ export type LabsDraft = Omit<LabReport, "id" | "file_paths" | "ai" | "created_at
 /** Lê o laudo enviado (foto ou PDF) e devolve um rascunho para a pessoa conferir. */
 export async function readHealthDoc<T extends BodyCompDraft | LabsDraft>(
   body: { mode: HealthMode; paths: string[] },
-): Promise<{ draft?: T; error?: string }> {
+): Promise<{ draft?: T; error?: string; consent?: "required" }> {
   try {
     const res = await httpsCallable(functions, "readHealthDoc", { timeout: 120_000 })(body);
-    return res.data as { draft?: T; error?: string };
+    return res.data as { draft?: T; error?: string; consent?: "required" };
   } catch {
     return { error: "Não foi possível ler o documento agora." };
   }
@@ -195,6 +197,7 @@ export type Reminders = {
   summary_time: string;
   bedtime_enabled: boolean;
   bedtime_time: string;
+  push_details: boolean;
 };
 
 export type StripeState = { status: string; until: string; cancel_at_period_end: boolean; trial_end: string | null };
@@ -228,6 +231,16 @@ export async function createPortal(): Promise<{ url?: string; error?: string }> 
     return res.data as { url?: string; error?: string };
   } catch {
     return { error: "Não foi possível abrir a assinatura agora." };
+  }
+}
+
+/** Apaga a conta e todos os dados (exige login recente e a palavra APAGAR). */
+export async function deleteAccount(): Promise<{ ok?: true; error?: string; reauth?: true }> {
+  try {
+    const res = await httpsCallable(functions, "deleteAccount", { timeout: 300_000 })({ confirm: "APAGAR" });
+    return res.data as { ok?: true; error?: string; reauth?: true };
+  } catch {
+    return { error: "Não foi possível apagar agora. Parte dos dados pode já ter sido apagada; tente de novo para concluir." };
   }
 }
 

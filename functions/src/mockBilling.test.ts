@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DELETING_ERROR } from "./deleting.js";
 import { memDb } from "./testing/memDb.js";
 import { deriveEntitlement } from "./entitlement.js";
 import { mockBillingEnabled, mockCheckout } from "./mockBilling.js";
@@ -20,6 +21,12 @@ describe("mockBillingEnabled", () => {
 });
 
 describe("mockCheckout", () => {
+  it("conta em exclusão: erro e nenhuma escrita", async () => {
+    const db = memDb({ "deleting/u": { at: "2026-10-20T12:00:00.000Z" } });
+    expect(await run(db)).toEqual({ error: DELETING_ERROR });
+    expect(db.writes).toEqual([]);
+  });
+
   it("7 dias para quem nunca teve teste", async () => {
     const db = memDb();
     expect(await run(db)).toEqual({ url: "http://localhost:8080/?pro=ok" });
