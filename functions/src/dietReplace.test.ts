@@ -5,8 +5,9 @@ function deps(old: { id: string; file_path: string | null }[]) {
   const list = vi.fn(async () => [...old, { id: "new", file_path: "diet-plans/u/a.pdf" }]);
   const create = vi.fn(async () => "new");
   const remove = vi.fn(async (_id: string) => {});
+  const deactivate = vi.fn(async (_id: string) => {});
   const deleteFile = vi.fn(async (_p: string) => {});
-  return { list, create, remove, deleteFile };
+  return { list, create, remove, deactivate, deleteFile };
 }
 
 describe("replaceDiets", () => {
@@ -27,7 +28,8 @@ describe("replaceDiets", () => {
     const id = await replaceDiets(d, {});
     expect(id).toBe("new");
     expect(d.deleteFile).toHaveBeenCalledTimes(2);
-    expect(d.remove).toHaveBeenCalledWith("b");
+    expect(d.deactivate).toHaveBeenCalledWith("a");
+    expect(d.remove.mock.calls.map((c) => c[0])).toEqual(["b"]);
     expect(err).toHaveBeenCalled();
     expect(JSON.stringify(err.mock.calls)).not.toContain("boom");
     err.mockRestore();

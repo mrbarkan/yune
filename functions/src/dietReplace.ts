@@ -4,6 +4,7 @@ export type ReplaceDeps = {
   list(): Promise<Doc[]>;
   create(data: Record<string, unknown>): Promise<string>;
   remove(id: string): Promise<void>;
+  deactivate(id: string): Promise<void>;
   deleteFile(path: string): Promise<void>;
 };
 
@@ -14,15 +15,20 @@ export async function replaceDiets(deps: ReplaceDeps, data: Record<string, unkno
     const docs = await deps.list();
     for (const d of docs) {
       if (d.id === newId) continue;
-      // Nunca apaga o arquivo que a dieta nova usa. Falha no arquivo não impede apagar o documento
-      // (senão a dieta antiga continuaria ativa ao lado da nova).
+      // Nunca apaga o arquivo que a dieta nova usa. Se o arquivo antigo não for apagado, o documento
+      // fica (inativo) para continuar apontando para ele: "Remover dieta" ou a próxima importação tentam de novo.
       try {
-        if (d.file_path && d.file_path !== newPath) await deps.deleteFile(d.file_path);
-      } catch {
-        console.error("importDietPlan: limpeza");
-      }
-      try {
-        await deps.remove(d.id);
+        let fileGone = true;
+        if (d.file_path && d.file_path !== newPath) {
+          try {
+            await deps.deleteFile(d.file_path);
+          } catch {
+            console.error("importDietPlan: limpeza");
+            fileGone = false;
+          }
+        }
+        if (fileGone) await deps.remove(d.id);
+        else await deps.deactivate(d.id);
       } catch {
         console.error("importDietPlan: limpeza");
       }

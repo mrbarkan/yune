@@ -197,6 +197,7 @@ export const importDietPlan = onCall(
         list: async () => (await col.get()).docs.map((d) => ({ id: d.id, file_path: (d.get("file_path") as string | null) ?? null })),
         create: async (data) => (await col.add(data)).id,
         remove: async (docId) => void (await col.doc(docId).delete()),
+        deactivate: async (docId) => void (await col.doc(docId).update({ active: false })),
         deleteFile: async (p) => void (await getStorage().bucket().file(p).delete({ ignoreNotFound: true })),
       },
       {
