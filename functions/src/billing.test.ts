@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleEvent, subscriptionTrial, syncCustomer } from "./billing.js";
+import { handleEvent, startCheckout, subscriptionTrial, syncCustomer } from "./billing.js";
 
 const now = new Date("2026-10-19T12:00:00.000Z");
 const sec = (iso: string) => Date.parse(iso) / 1000;
@@ -203,5 +203,73 @@ describe("subscriptionTrial", () => {
   it("7 dias ou nenhum", () => {
     expect(subscriptionTrial("7d", null)).toEqual({ trial_period_days: 7 });
     expect(subscriptionTrial("none", "2026-10-20T12:00:00.000Z")).toEqual({});
+  });
+});
+
+describe("startCheckout", () => {
+  const fakeStripe = (o: { subs?: unknown[]; open?: { id: string }[] } = {}) => ({
+    ...lister(o.subs ?? []),
+    customers: { create: vi.fn().mockResolvedValue({ id: "cus_new" }) },
+    prices: { list: vi.fn().mockResolvedValue({ data: [{ id: "price_m" }] }) },
+    checkout: {
+      sessions: {
+        list: vi.fn().mockResolvedValue({ data: o.open ?? [] }),
+        expire: vi.fn().mockResolvedValue({}),
+        create: vi.fn().mockResolvedValue({ url: "https://checkout.stripe.test/s" }),
+      },
+    },
+  });
+  const args = { uid: "u1", email: "a@b.c", plan: "monthly" as const, appUrl: "https://app.test", now };
+
+  it("expira as sessões abertas antes de criar outra (não cobra duas vezes)", async () => {
+    const stripe = fakeStripe({ open: [{ id: "cs_a" }, { id: "cs_b" }] });
+    const db = memDb({ "billing/u1": { customer_id: "cus_1" } });
+    expect(await startCheckout({ stripe, db }, args)).toEqual({ url: "https://checkout.stripe.test/s" });
+    expect(stripe.checkout.sessions.list).toHaveBeenCalledWith({ customer: "cus_1", status: "open", limit: 100 });
+    expect(stripe.checkout.sessions.expire.mock.calls.map((c) => c[0])).toEqual(["cs_a", "cs_b"]);
+    const expireOrder = Math.max(...stripe.checkout.sessions.expire.mock.invocationCallOrder);
+    expect(stripe.checkout.sessions.create.mock.invocationCallOrder[0]).toBeGreaterThan(expireOrder);
+    expect(stripe.customers.create).not.toHaveBeenCalled();
+  });
+
+  it("parâmetros do Checkout: só cartão, pt-BR, URLs de volta e teste de 7 dias", async () => {
+    const stripe = fakeStripe();
+    await startCheckout({ stripe, db: memDb() }, args);
+    expect(stripe.customers.create).toHaveBeenCalledWith({ email: "a@b.c", metadata: { uid: "u1" } }, { idempotencyKey: "customer-u1" });
+    expect(stripe.prices.list).toHaveBeenCalledWith({ lookup_keys: ["yune_pro_monthly"], active: true, limit: 1 });
+    expect(stripe.checkout.sessions.create).toHaveBeenCalledWith({
+      mode: "subscription",
+      customer: "cus_new",
+      client_reference_id: "u1",
+      line_items: [{ price: "price_m", quantity: 1 }],
+      allowed_payment_method_types: ["card"],
+      locale: "pt-BR",
+      success_url: "https://app.test/?pro=ok",
+      cancel_url: "https://app.test/?pro=cancel",
+      subscription_data: { trial_period_days: 7 },
+    });
+  });
+
+  it("beta: o teste vai até o fim do beta", async () => {
+    const stripe = fakeStripe();
+    const db = memDb({ "entitlements/u1": { beta_until: "2026-11-10T12:00:00.000Z" } });
+    await startCheckout({ stripe, db }, args);
+    expect(stripe.checkout.sessions.create.mock.calls[0][0]).toMatchObject({ subscription_data: { trial_end: sec("2026-11-10T12:00:00.000Z") } });
+  });
+
+  it("quem já tem o Pro não ganha outra sessão (e as abertas expiram)", async () => {
+    const stripe = fakeStripe({ subs: [sub()], open: [{ id: "cs_a" }] });
+    const db = memDb({ "billing/u1": { customer_id: "cus_1" } });
+    expect(await startCheckout({ stripe, db }, args)).toEqual({ error: "Você já tem o Pro." });
+    expect(stripe.checkout.sessions.expire).toHaveBeenCalledWith("cs_a");
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
+  });
+
+  it("erro ao expirar não cria sessão nova", async () => {
+    const stripe = fakeStripe({ open: [{ id: "cs_a" }] });
+    stripe.checkout.sessions.expire.mockRejectedValueOnce(new Error("já concluída"));
+    const db = memDb({ "billing/u1": { customer_id: "cus_1" } });
+    await expect(startCheckout({ stripe, db }, args)).rejects.toThrow("já concluída");
+    expect(stripe.checkout.sessions.create).not.toHaveBeenCalled();
   });
 });

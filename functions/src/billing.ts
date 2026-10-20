@@ -31,6 +31,17 @@ export type Db = {
 type SubscriptionLister = {
   subscriptions: { list(params: Stripe.SubscriptionListParams): PromiseLike<{ data: Stripe.Subscription[] }> };
 };
+type CheckoutClient = SubscriptionLister & {
+  customers: { create(params: Stripe.CustomerCreateParams, options?: Stripe.RequestOptions): PromiseLike<{ id: string }> };
+  prices: { list(params: Stripe.PriceListParams): PromiseLike<{ data: { id: string }[] }> };
+  checkout: {
+    sessions: {
+      list(params: Stripe.Checkout.SessionListParams): PromiseLike<{ data: { id: string }[] }>;
+      expire(id: string): PromiseLike<unknown>;
+      create(params: Stripe.Checkout.SessionCreateParams): PromiseLike<{ url: string | null }>;
+    };
+  };
+};
 type CustomerReader = {
   customers: { retrieve(id: string): PromiseLike<Stripe.Customer | Stripe.DeletedCustomer> };
 };
@@ -126,51 +137,64 @@ export const stripeWebhook = onRequest(
 
 const NOT_SIGNED_IN = { error: "Faça login para continuar." };
 
+/**
+ * Abre o Checkout. Antes, relê a Stripe (cobre webhook perdido) e expira as sessões abertas do customer:
+ * elas valem 24 h, e pagar duas daria duas assinaturas. Lança em erro de rede (quem chama responde `{ error }`).
+ */
+export async function startCheckout(
+  deps: { stripe: CheckoutClient; db: Db },
+  a: { uid: string; email: string | undefined; plan: keyof typeof PRICES; appUrl: string; now: Date },
+): Promise<{ url: string } | { error: string }> {
+  const { stripe, db } = deps;
+  const billingRef = db.doc(`billing/${a.uid}`);
+  let customerId = (await billingRef.get()).get("customer_id") as string | undefined;
+  if (customerId) {
+    await syncCustomer(stripe, db, a.uid, customerId, a.now);
+    const open = await stripe.checkout.sessions.list({ customer: customerId, status: "open", limit: 100 });
+    for (const s of open.data) await stripe.checkout.sessions.expire(s.id);
+  }
+  const state = (await db.doc(`entitlements/${a.uid}`).get()).get("stripe") as StripeState | null | undefined;
+  if (state && COUNTING.has(state.status)) return { error: "Você já tem o Pro." };
+
+  if (!customerId) {
+    const customer = await stripe.customers.create(
+      { email: a.email, metadata: { uid: a.uid } },
+      { idempotencyKey: `customer-${a.uid}` },
+    );
+    customerId = customer.id;
+    await billingRef.set({ customer_id: customerId }, { merge: true });
+  }
+
+  const price = (await stripe.prices.list({ lookup_keys: [PRICES[a.plan]], active: true, limit: 1 })).data[0];
+  if (!price) return { error: "Assinatura indisponível no momento." };
+
+  const { beta_until, trial } = await trialOf(db, a.uid, a.now);
+  const session = await stripe.checkout.sessions.create({
+    mode: "subscription",
+    customer: customerId,
+    client_reference_id: a.uid,
+    line_items: [{ price: price.id, quantity: 1 }],
+    // Só cartão. Na API atual o campo é allowed_payment_method_types (payment_method_types saiu do Checkout).
+    allowed_payment_method_types: ["card"],
+    locale: "pt-BR",
+    success_url: `${a.appUrl}/?pro=ok`,
+    cancel_url: `${a.appUrl}/?pro=cancel`,
+    subscription_data: subscriptionTrial(trial, beta_until),
+  });
+  if (!session.url) return { error: "Não foi possível abrir o pagamento agora." };
+  return { url: session.url };
+}
+
 // Como as outras funções do Yune, devolve sempre um objeto: `{ url }` ou `{ error }`.
 export const createCheckout = onCall({ region: REGION, secrets: [STRIPE_SECRET_KEY] }, async (req) => {
   if (!req.auth || req.auth.token.email_verified !== true) return NOT_SIGNED_IN;
-  const uid = req.auth.uid;
   const plan = (req.data as { plan?: unknown } | null)?.plan;
   if (plan !== "monthly" && plan !== "annual") return { error: "Plano inválido." };
-
-  const stripe = client();
-  const db = getFirestore();
-  const now = new Date();
   try {
-    const billingRef = db.doc(`billing/${uid}`);
-    let customerId = (await billingRef.get()).get("customer_id") as string | undefined;
-    // Já tem customer: relê a Stripe antes de decidir (cobre webhook perdido e evita cobrar duas vezes).
-    if (customerId) await syncCustomer(stripe, db, uid, customerId, now);
-    const state = (await db.doc(`entitlements/${uid}`).get()).get("stripe") as StripeState | null | undefined;
-    if (state && COUNTING.has(state.status)) return { error: "Você já tem o Pro." };
-
-    if (!customerId) {
-      const customer = await stripe.customers.create(
-        { email: req.auth.token.email, metadata: { uid } },
-        { idempotencyKey: `customer-${uid}` },
-      );
-      customerId = customer.id;
-      await billingRef.set({ customer_id: customerId }, { merge: true });
-    }
-
-    const price = (await stripe.prices.list({ lookup_keys: [PRICES[plan]], active: true, limit: 1 })).data[0];
-    if (!price) return { error: "Assinatura indisponível no momento." };
-
-    const { beta_until, trial } = await trialOf(db, uid, now);
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer: customerId,
-      client_reference_id: uid,
-      line_items: [{ price: price.id, quantity: 1 }],
-      // Só cartão. Na API atual o campo é allowed_payment_method_types (payment_method_types saiu do Checkout).
-      allowed_payment_method_types: ["card"],
-      locale: "pt-BR",
-      success_url: `${appUrl()}/?pro=ok`,
-      cancel_url: `${appUrl()}/?pro=cancel`,
-      subscription_data: subscriptionTrial(trial, beta_until),
-    });
-    if (!session.url) return { error: "Não foi possível abrir o pagamento agora." };
-    return { url: session.url };
+    return await startCheckout(
+      { stripe: client(), db: getFirestore() },
+      { uid: req.auth.uid, email: req.auth.token.email, plan, appUrl: appUrl(), now: new Date() },
+    );
   } catch (err) {
     console.error("createCheckout", message(err));
     return { error: "Não foi possível abrir o pagamento agora." };
