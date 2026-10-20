@@ -7,17 +7,24 @@ export type Decision =
   | { write: false }
   | { write: true; data: { beta_until: string; pro: boolean; until: string | null; source: "stripe" | "beta" | null } };
 
-/** Sem emulador, --project é obrigatório (para não acertar a produção sem querer). */
+/** Sem --apply é simulação (dry-run). Sem emulador, --project é obrigatório (para não acertar a produção sem querer). */
 export function parseArgs(argv: string[], env: Record<string, string | undefined>): Args {
-  let days = NaN, dryRun = false, project = "";
+  let days = NaN, apply = false, forceDry = false, project = "";
+  const value = (flag: string, i: number) => {
+    const v = argv[i + 1];
+    if (v === undefined || v.startsWith("--")) throw new Error(`Informe um valor para ${flag}.`);
+    return v;
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "--dry-run") dryRun = true;
-    else if (a === "--days") days = Number(argv[++i]);
-    else if (a === "--project") project = argv[++i] ?? "";
+    if (a === "--apply") apply = true;
+    else if (a === "--dry-run") forceDry = true;
+    else if (a === "--days") days = Number(value(a, i++));
+    else if (a === "--project") project = value(a, i++);
     else throw new Error(`Argumento desconhecido: ${a}`);
   }
-  if (!Number.isInteger(days) || days <= 0) throw new Error("Informe --days com um número inteiro positivo.");
+  if (!Number.isInteger(days) || days < 1 || days > 90) throw new Error("Use --days entre 1 e 90.");
+  const dryRun = forceDry || !apply;
   if (!env.FIRESTORE_EMULATOR_HOST) {
     if (!project) throw new Error("Sem emulador, informe --project <id> explicitamente.");
   } else if (!project) project = "demo-yune";

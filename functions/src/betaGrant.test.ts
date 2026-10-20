@@ -5,8 +5,23 @@ const now = new Date("2026-10-19T12:00:00.000Z");
 const stripe = { status: "active", until: "2027-03-01T00:00:00.000Z", cancel_at_period_end: false, trial_end: null };
 
 describe("parseArgs", () => {
-  it("lê days, dry-run e project", () => {
-    expect(parseArgs(["--days", "30", "--dry-run", "--project", "yune-x"], {})).toEqual({ days: 30, dryRun: true, project: "yune-x" });
+  it("lê days, apply e project", () => {
+    expect(parseArgs(["--days", "30", "--apply", "--project", "yune-x"], {})).toEqual({ days: 30, dryRun: false, project: "yune-x" });
+  });
+  it("sem --apply é dry-run", () => {
+    expect(parseArgs(["--days", "30"], { FIRESTORE_EMULATOR_HOST: "h" }).dryRun).toBe(true);
+    expect(parseArgs(["--days", "30", "--apply"], { FIRESTORE_EMULATOR_HOST: "h" }).dryRun).toBe(false);
+  });
+  it("--dry-run vence --apply", () => {
+    expect(parseArgs(["--days", "30", "--apply", "--dry-run"], { FIRESTORE_EMULATOR_HOST: "h" }).dryRun).toBe(true);
+  });
+  it("days fica entre 1 e 90", () => {
+    expect(() => parseArgs(["--days", "91"], {})).toThrow(/entre 1 e 90/);
+    expect(() => parseArgs(["--days", "0"], {})).toThrow(/entre 1 e 90/);
+  });
+  it("valor ausente ou outra flag no lugar do valor lança", () => {
+    expect(() => parseArgs(["--days", "30", "--project", "--apply"], {})).toThrow(/--project/);
+    expect(() => parseArgs(["--days"], {})).toThrow(/--days/);
   });
   it("exige days positivo", () => {
     expect(() => parseArgs([], {})).toThrow(/--days/);

@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getFirestore } from "firebase-admin/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { onCall } from "firebase-functions/v2/https";
+import { clipPlan } from "./dietClip.js";
 import { fileContent } from "./files.js";
 import { isPro } from "./pro.js";
 import { REGION } from "./region.js";
@@ -29,6 +30,7 @@ Regras:
 (preencha max_per_day e unit quando houver número por dia: "g", "ml" ou "vezes"; sem número, max_per_day 0 e unit ""); "prefer" = incentivado. \
 "keywords": 3 a 12 termos em minúsculas e sem acento que apareceriam no nome do alimento registrado \
 (ex.: refrigerante → ["refrigerante", "coca", "guarana", "soda"]).
+- Não copie nome, CPF, data de nascimento, telefone, endereço ou outro dado que identifique a pessoa (paciente) em nenhum campo. "prescriber" é só o nome e o registro profissional (CRN/CRM) de quem prescreveu.
 - "guidelines": orientações gerais curtas (hidratação, horários, preparo).
 - "summary": uma ou duas frases sobre o objetivo da dieta.
 - Se o documento não for uma dieta ou plano alimentar, is_diet = false e explique em "notes".`;
@@ -182,8 +184,9 @@ export const importDietPlan = onCall(
     }
     if (!plan.is_diet) return { error: "Não encontrei uma dieta neste arquivo." };
 
-    const { is_diet: _, ...rest } = plan;
-    rest.rules = plan.rules.map((r) => ({ ...r, keywords: [...new Set(r.keywords.map(fold).filter(Boolean))].slice(0, 12) }));
+    const { is_diet: _, ...unclipped } = plan;
+    unclipped.rules = plan.rules.map((r) => ({ ...r, keywords: [...new Set(r.keywords.map(fold).filter(Boolean))].slice(0, 12) }));
+    const rest = clipPlan(unclipped);
 
     // Só uma dieta ativa por vez; as anteriores ficam guardadas.
     const db = getFirestore();
