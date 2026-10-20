@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exportFileName, exportTables, fmtLocal, type ExportData } from "./export";
+import { exportFileName, exportTables, fmtLocal, pdfText, type ExportData } from "./export";
 import type { Profile } from "./firebase";
 
 const profile: Profile = {
@@ -80,5 +80,17 @@ describe("export", () => {
     }] }, tz);
     expect(JSON.stringify(t)).not.toContain("body-photos");
     expect(JSON.stringify(t)).not.toContain("photo");
+  });
+});
+
+describe("pdfText", () => {
+  it("troca sinais de comparação por ASCII em vez de sumir com eles", () => {
+    expect(pdfText("Desejável: ≥ 40")).toBe("Desejável: >= 40");
+    expect(pdfText("≤ 0,5 · −1,2 · ≠ 3 · ≈ 4")).toBe("<= 0,5 · -1,2 · != 3 · ~ 4");
+  });
+  it("mantém Latin-1 e tira o que a fonte não tem", () => {
+    expect(pdfText("Ação 5 µg/m² — ok 😀")).toBe("Ação 5 µg/m² — ok ");
+    expect(pdfText(null)).toBe("");
+    expect(pdfText(12.5)).toBe("12.5");
   });
 });

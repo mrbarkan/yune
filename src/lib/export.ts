@@ -112,8 +112,10 @@ export async function downloadXlsx(tables: ExportTable[], fileName: string) {
   await writeExcelFile(sheets).toFile(`${fileName}.xlsx`);
 }
 
-// A fonte padrão do PDF (Helvetica) cobre Latin-1 e pontuação comum; o resto sai da página.
-const pdfText = (c: Cell) => (c == null ? "" : String(c)).replace(/[^ -ÿ–—‘’“”•…]/g, "");
+// A fonte padrão do PDF (Helvetica) cobre Latin-1 e pontuação comum; sinais de conta viram ASCII e o resto sai da página.
+const ASCII: Record<string, string> = { "≤": "<=", "≥": ">=", "−": "-", "≠": "!=", "≈": "~", "→": "->", "⁄": "/" };
+export const pdfText = (c: Cell) =>
+  (c == null ? "" : String(c)).replace(/[≤≥−≠≈→⁄]/g, (m) => ASCII[m]).replace(/[^ -ÿ–—‘’“”•…]/g, "");
 
 export async function downloadPdf(tables: ExportTable[], profile: Profile, fileName: string) {
   const [{ jsPDF }, { autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
