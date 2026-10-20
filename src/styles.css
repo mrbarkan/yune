@@ -494,3 +494,17 @@ input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; bo
 .chip-static { display: inline-block; justify-self: start; min-height: 0; padding: 4px 10px; font-size: 12px; color: var(--ink-2); }
 .confirm-title { margin: 0; font: 400 22px var(--serif); }
 .note.small { font-size: 12px; color: var(--ink-3); }
+
+/* Exames */
+.lab-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.lab-row { display: grid; gap: 6px; background: var(--paper-2); border-radius: 14px; padding: 10px 12px; }
+.lab-row input, .lab-row select { min-height: 40px; min-width: 0; width: 100%; background: transparent; border: 1px solid var(--line); border-radius: 10px; padding: 0 10px; font-size: 16px; color: var(--ink); }
+.lab-line { display: flex; gap: 8px; align-items: center; }
+.lab-reports > li { flex-wrap: wrap; }
+.lab-report { flex: 1; min-width: 0; }
+.lab-report summary { cursor: pointer; list-style: none; }
+.lab-results { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.lab-results li { display: grid; grid-template-columns: 1fr auto; gap: 0 12px; padding: 6px 0; border: 0; font-size: 14px; }
+.lab-results li small { grid-column: 1 / -1; }
+.lab-results li.out > span:nth-child(2), .lab-out { color: var(--food); }
+.row.sp { display: flex; justify-content: space-between; align-items: center; gap: 8px; }

@@ -15,6 +15,9 @@ import { HealthSheet } from "@/sheets/HealthSheet";
 import BodyCompView from "@/screens/BodyCompView";
 import { deltaText, useBodyComp } from "@/lib/bodycomp";
 import { bodyCompDelta } from "@/lib/health";
+import LabsView from "@/screens/LabsView";
+import { outOfRangeCount, useLabReports } from "@/lib/labreports";
+import { normalizeResult } from "@/lib/labs";
 import { completion, useLatestAnamnesis } from "@/lib/anamnesis";
 
 type DietProps = { allowed: boolean; plan: DietPlan | null; onOpen: () => void; onChanged: () => void };
@@ -65,6 +68,9 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
   const [body, setBody] = useState<"" | "view" | "add">("");
   const [bv, setBv] = useState(0);
   const { list: bodyList, err: bodyErr } = useBodyComp(version + bv);
+  const [labs, setLabs] = useState<"" | "view" | "add">("");
+  const [lv, setLv] = useState(0);
+  const { list: labList, err: labErr } = useLabReports(version + lv);
   const [edit, setEdit] = useState(false);
   const closeEdit = useCallback(() => setEdit(false), []);
   const [healthOpen, setHealthOpen] = useState(false);
@@ -97,6 +103,14 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
     );
   }
 
+  const labsAllowed = canUse(ent, "labs");
+  if (labs) {
+    return (
+      <LabsView profile={profile} list={labList} loadErr={labErr} allowed={labsAllowed} startAdding={labs === "add"}
+        onPro={onPro} onBack={() => setLabs("")} onChanged={() => { setLv((n) => n + 1); onSaved(); }} />
+    );
+  }
+
   if (photosOpen) {
     return (
       <PhotosView profile={profile} photos={photos.list} measurements={list} loadErr={photos.err}
@@ -115,6 +129,13 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
   const bodyLast = bodyList[bodyList.length - 1];
   const bodyMuscle = bodyLast ? (bodyLast.muscle_kg ?? bodyLast.lean_kg) : null;
   const bodyDelta = bodyLast ? bodyCompDelta(bodyList, bodyLast.device) : null;
+
+  const labLast = labList[labList.length - 1];
+  const labOut = labLast ? outOfRangeCount(labLast) : 0;
+  // Até três resultados do último laudo, só os que o Yune reconhece e com valor.
+  const labBits = labLast
+    ? labLast.results.filter((r) => normalizeResult(r)).slice(0, 3).map((r) => `${r.name} ${(normalizeResult(r)!.value).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}`)
+    : [];
 
   const age = profile.birth_year ? new Date().getFullYear() - profile.birth_year : null;
   const bits = [
@@ -178,8 +199,20 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
         )}
         {bodyErr && <p className="note err">{bodyErr}</p>}
       </Card>
-      <Card label="Exames" action="+ enviar" locked={!canUse(ent, "labs")} onOpen={soon} onPro={onPro}>
-        <p className="empty">Envie um exame de sangue</p>
+      <Card label="Exames" action="+ enviar" locked={!labsAllowed && !labList.length && !labErr}
+        onOpen={() => (labsAllowed ? setLabs("add") : onPro())} onPro={onPro}>
+        {labLast ? (
+          <button className="pcard-body" onClick={() => setLabs("view")}>
+            <div className="row sp">
+              <span>Sangue · {new Date(labLast.collected_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</span>
+              {labOut > 0 && <span className="chip chip-static lab-out">{labOut} fora da referência do laboratório</span>}
+            </div>
+            {labBits.length > 0 && <small>{labBits.join(" · ")}</small>}
+          </button>
+        ) : labErr ? null : (
+          <p className="empty">Envie um exame de sangue</p>
+        )}
+        {labErr && <p className="note err">{labErr}</p>}
       </Card>
       <div className="pcard-pair">
         <Card label="Fotos" half onOpen={() => setPhotosOpen(true)}>
