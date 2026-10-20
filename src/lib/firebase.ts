@@ -195,6 +195,7 @@ export type Reminders = {
   summary_time: string;
   bedtime_enabled: boolean;
   bedtime_time: string;
+  push_details: boolean;
 };
 
 export type StripeState = { status: string; until: string; cancel_at_period_end: boolean; trial_end: string | null };

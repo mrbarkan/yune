@@ -39,8 +39,9 @@ service cloud.firestore {
 
     function validReminders() {
       return d().keys().hasOnly(['water_enabled', 'water_every_min', 'water_start', 'water_end', 'summary_enabled', 'summary_time',
-          'bedtime_enabled', 'bedtime_time', 'last_water_at', 'last_summary_date', 'last_bedtime_date'])
+          'bedtime_enabled', 'bedtime_time', 'push_details', 'last_water_at', 'last_summary_date', 'last_bedtime_date'])
         && d().water_enabled is bool && d().summary_enabled is bool && d().bedtime_enabled is bool
+        && (!d().keys().hasAny(['push_details']) || d().push_details is bool)
         && num(d().water_every_min, 30, 480)
         && hhmm(d().water_start) && hhmm(d().water_end) && hhmm(d().summary_time) && hhmm(d().bedtime_time);
     }

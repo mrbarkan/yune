@@ -159,6 +159,8 @@ export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }:
               <label className="field"><span>Lembrar às</span>
                 <input type="time" value={r.bedtime_time.slice(0, 5)} onChange={(e) => saveReminders({ ...r, bedtime_time: e.target.value })} /></label>
             )}
+            <Toggle label="Mostrar números nas notificações" on={r.push_details} onChange={(v) => saveReminders({ ...r, push_details: v })} />
+            <p className="note">Desligado, a notificação não mostra calorias nem metas na tela bloqueada.</p>
           </div>
         )}
       </section>

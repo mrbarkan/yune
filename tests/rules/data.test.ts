@@ -55,6 +55,13 @@ describe("regras: dados", () => {
     await ok("https://wns2-par02p.notify.windows.com/w/?token=BQYAAAAbc", "d".repeat(64));
   });
 
+  it("reminders: push_details é booleano opcional", async () => {
+    await assertSucceeds(setDoc(doc(alice(), "reminders/alice"), { ...DEFAULT_REMINDERS, push_details: true }));
+    await assertFails(setDoc(doc(alice(), "reminders/alice"), { ...DEFAULT_REMINDERS, push_details: "sim" }));
+    const { push_details: _omit, ...semChave } = DEFAULT_REMINDERS as Record<string, unknown>;
+    await assertSucceeds(setDoc(doc(alice(), "reminders/alice"), semChave));
+  });
+
   it("reminders: campos last_* são do servidor", async () => {
     await assertSucceeds(setDoc(doc(alice(), "reminders/alice"), DEFAULT_REMINDERS));
     await assertFails(setDoc(doc(alice(), "reminders/alice"), { ...DEFAULT_REMINDERS, last_water_at: NOW }));

@@ -9,4 +9,5 @@ export const DEFAULT_PROFILE: Omit<Profile, "id" | "name" | "timezone"> = {
 export const DEFAULT_REMINDERS: Omit<Reminders, "user_id"> = {
   water_enabled: true, water_every_min: 120, water_start: "09:00", water_end: "21:00",
   summary_enabled: true, summary_time: "21:30", bedtime_enabled: false, bedtime_time: "23:00",
+  push_details: false,
 };
