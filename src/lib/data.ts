@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getDoc, getDocs, orderBy, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { auth, DEFAULT_PROFILE, DEFAULT_REMINDERS, profileDoc, remindersDoc, rows, table, type Activity, type Meal, type Profile, type Sleep, type Water } from "./firebase";
+import { retryDenied } from "./retry";
 import { addDays, startOfDay } from "./time";
 
 export type DayData = { meals: Meal[]; activities: Activity[]; water: Water[]; sleep: Sleep[] };
@@ -95,7 +96,8 @@ export function useRange(from: Date, days: number, version: number) {
 
 export function useProfile(userId: string | undefined) {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const reload = useCallback(async () => {
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
     if (!userId) return;
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo";
     const ref = profileDoc(userId);
@@ -115,9 +117,19 @@ export function useProfile(userId: string | undefined) {
       }
     }
     setProfile(p);
+    setError(null);
   }, [userId]);
+  // Logo após "Já confirmei" o Firestore pode ainda estar com o token sem email_verified: renova e tenta de novo.
+  const reload = useCallback(async () => {
+    try {
+      await retryDenied(load, () => auth.currentUser?.getIdToken(true) ?? Promise.resolve());
+    } catch (err) {
+      console.error(err);
+      setError("Não foi possível carregar seu perfil. Verifique a conexão e tente de novo.");
+    }
+  }, [load]);
   useEffect(() => {
     reload();
   }, [reload]);
-  return { profile, reload };
+  return { profile, reload, error };
 }

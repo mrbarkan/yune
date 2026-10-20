@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { onIdTokenChanged, type User } from "firebase/auth";
+import { onIdTokenChanged, signOut, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useProfile } from "@/lib/data";
 import { useDietPlan } from "@/lib/diet";
@@ -35,7 +35,7 @@ export default function App() {
 }
 
 function Shell({ userId }: { userId: string }) {
-  const { profile, reload } = useProfile(userId);
+  const { profile, reload, error: profileError } = useProfile(userId);
   const [tab, setTab] = useState<Tab>("today");
   const [sheet, setSheet] = useState<SheetKind>(null);
   const [edit, setEdit] = useState<EditTarget | null>(null);
@@ -73,7 +73,16 @@ function Shell({ userId }: { userId: string }) {
     return () => document.removeEventListener("visibilitychange", refresh);
   }, [bump]);
 
-  if (!profile) return <div className="boot" />;
+  if (!profile) {
+    if (!profileError) return <div className="boot" />;
+    return (
+      <main className="auth">
+        <p className="note err">{profileError}</p>
+        <button className="btn primary" onClick={reload}>Tentar de novo</button>
+        <nav className="auth-switch"><button onClick={() => signOut(auth)}>Sair</button></nav>
+      </main>
+    );
+  }
 
   return (
     <div className="app">

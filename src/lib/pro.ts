@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { onSnapshot } from "firebase/firestore";
 import { entitlementsDoc, type Entitlements } from "./firebase";
+import { fmtDayMonth } from "./time";
 
 // Beta: todo mundo tem Pro enquanto não houver cobrança. Desligar junto com PRO_OPEN em functions/src/pro.ts.
 export const PRO_OPEN = true;
@@ -57,14 +58,9 @@ export function useEntitlements(userId: string) {
   return ent;
 }
 
-/** dd/mm no fuso da pessoa. */
-export function fmtDayMonth(iso: string, tz: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: tz });
-}
-
 /** Texto do status do Pro em Ajustes; null quando não há nada a dizer. */
-export function proStatusLine(s: { status: ProStatus; until: string | null }, tz: string): string | null {
-  const d = s.until ? fmtDayMonth(s.until, tz) : "";
+export function proStatusLine(s: { status: ProStatus; until: string | null }, tz: string, now: Date = new Date()): string | null {
+  const d = s.until ? fmtDayMonth(s.until, tz, now) : "";
   switch (s.status) {
     case "trial": return `Teste grátis até ${d}`;
     case "active": return `Pro até ${d}`;

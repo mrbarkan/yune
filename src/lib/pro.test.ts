@@ -49,6 +49,7 @@ describe("proStatusLine", () => {
   const tz = "America/Sao_Paulo";
   it("active", () => expect(proStatusLine({ status: "active", until: "2026-11-19T15:00:00Z" }, tz)).toBe("Pro até 19/11"));
   it("trial", () => expect(proStatusLine({ status: "trial", until: "2026-10-26T15:00:00Z" }, tz)).toBe("Teste grátis até 26/10"));
+  it("plano anual: mostra o ano", () => expect(proStatusLine({ status: "active", until: "2027-10-20T15:00:00Z" }, tz, new Date("2026-10-20T15:00:00Z"))).toBe("Pro até 20/10/2027"));
   it("canceling", () => expect(proStatusLine({ status: "canceling", until: "2026-11-19T15:00:00Z" }, tz)).toBe("Cancelado — Pro até 19/11"));
   it("beta usa o fuso (01:00Z do dia 19 ainda é dia 18 em SP)", () =>
     expect(proStatusLine({ status: "beta", until: "2026-11-19T01:00:00Z" }, tz)).toBe("Pro do beta até 18/11"));
