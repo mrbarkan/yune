@@ -61,7 +61,7 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
   const [settings, setSettings] = useState(false);
   const [meas, setMeas] = useState<"" | "view" | "add">("");
   const [mv, setMv] = useState(0);
-  const list = useMeasurements(version + mv);
+  const { list, err: measErr } = useMeasurements(version + mv);
   const [photosOpen, setPhotosOpen] = useState(false);
   const [pv, setPv] = useState(0);
   const photos = useBodyPhotos(version + pv);
@@ -90,7 +90,7 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
 
   if (meas) {
     return (
-      <MeasurementsView profile={profile} list={list} startAdding={meas === "add"} onBack={() => setMeas("")}
+      <MeasurementsView profile={profile} list={list} loadErr={measErr} startAdding={meas === "add"} onBack={() => setMeas("")}
         onChanged={() => { setMv((n) => n + 1); onSaved(); }} />
     );
   }
@@ -98,7 +98,7 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
   const bodyAllowed = canUse(ent, "body_comp");
   if (body) {
     return (
-      <BodyCompView profile={profile} list={bodyList} loadErr={bodyErr} measurements={list} allowed={bodyAllowed} startAdding={body === "add"}
+      <BodyCompView profile={profile} list={bodyList} loadErr={bodyErr} measurements={measErr ? null : list} allowed={bodyAllowed} startAdding={body === "add"}
         onPro={onPro} onBack={() => setBody("")} onChanged={() => { setBv((n) => n + 1); setMv((n) => n + 1); onSaved(); }} />
     );
   }
@@ -113,7 +113,7 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
 
   if (photosOpen) {
     return (
-      <PhotosView profile={profile} photos={photos.list} measurements={list} loadErr={photos.err}
+      <PhotosView profile={profile} photos={photos.list} measurements={list} loadErr={photos.err || measErr}
         onBack={() => setPhotosOpen(false)} onChanged={() => setPv((n) => n + 1)} />
     );
   }
@@ -178,9 +178,10 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
             </div>
             {list.length > 1 && <LineChart compact unit="kg" color="var(--ink)" points={list.map((m) => ({ t: m.measured_at, v: m.weight_kg }))} />}
           </button>
-        ) : (
+        ) : measErr ? null : (
           <p className="empty">Registre seu peso</p>
         )}
+        {measErr && <p className="note err">{measErr}</p>}
       </Card>
       <Card label="Composição corporal" action="+ enviar" locked={!bodyAllowed && !bodyList.length && !bodyErr}
         onOpen={() => (bodyAllowed ? setBody("add") : onPro())} onPro={onPro}>

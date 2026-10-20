@@ -3,6 +3,7 @@ import { LineChart } from "@/components/LineChart";
 import type { BodyComp, BodyCompValues, Measurement, Profile } from "@/lib/firebase";
 import { bodyCompDelta } from "@/lib/health";
 import { deleteBodyComp, deltaText, openHealthFile } from "@/lib/bodycomp";
+import { syncWeightOrWarn } from "@/lib/measurements";
 import { BodyCompSheet } from "@/sheets/BodyCompSheet";
 
 const num = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
@@ -12,7 +13,7 @@ export const devKey = (d: string) => d.toLowerCase().replace(/\s+/g, "");
 type Series = { key: keyof BodyCompValues; label: string; unit: string; color: string };
 
 export default function BodyCompView({ profile, list, loadErr, measurements, allowed, startAdding, onPro, onBack, onChanged }: {
-  profile: Profile; list: BodyComp[]; loadErr?: string; measurements: Measurement[]; allowed: boolean; startAdding?: boolean;
+  profile: Profile; list: BodyComp[]; loadErr?: string; measurements: Measurement[] | null; allowed: boolean; startAdding?: boolean;
   onPro: () => void; onBack: () => void; onChanged: () => void;
 }) {
   const [sheet, setSheet] = useState<{ rec?: BodyComp } | null>(startAdding && allowed ? {} : null);
@@ -61,6 +62,7 @@ export default function BodyCompView({ profile, list, loadErr, measurements, all
     try {
       await deleteBodyComp(b);
       setConfirm(null);
+      setWarn((await syncWeightOrWarn(profile.id, "Laudo apagado")) ?? "");
     } catch {
       setErr("Não foi possível apagar.");
     }

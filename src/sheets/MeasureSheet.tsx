@@ -8,8 +8,8 @@ import { fromLocalInput, toLocalInput } from "@/lib/time";
 const show = (n: number | null | undefined) => (n == null ? "" : String(n).replace(".", ","));
 
 /** Peso obrigatório; cintura, quadril e pescoço opcionais. */
-export function MeasureSheet({ profile, all, rec, onClose, onSaved }: {
-  profile: Profile; all: Measurement[]; rec?: Measurement; onClose: () => void; onSaved: () => void;
+export function MeasureSheet({ profile, rec, onClose, onSaved }: {
+  profile: Profile; rec?: Measurement; onClose: () => void; onSaved: (warn?: string) => void;
 }) {
   const [weight, setWeight] = useState(show(rec?.weight_kg));
   const [waist, setWaist] = useState(show(rec?.waist_cm));
@@ -31,11 +31,11 @@ export function MeasureSheet({ profile, all, rec, onClose, onSaved }: {
     setBusy(true);
     setMsg("");
     try {
-      await saveMeasurement(
+      const warn = await saveMeasurement(
         { measured_at: fromLocalInput(when), weight_kg: w, waist_cm: wa, hip_cm: hi, neck_cm: ne, source: rec?.source ?? "manual", created_at: rec?.created_at },
-        profile, rec?.id, all,
+        profile, rec?.id,
       );
-      onSaved();
+      onSaved(warn);
     } catch {
       setMsg("Não foi possível salvar. Tente de novo.");
       setBusy(false);

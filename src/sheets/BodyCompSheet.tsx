@@ -13,9 +13,9 @@ const dayOf = (iso: string | undefined, tz: string) => {
 
 type Stage = "pick" | "reading" | "form";
 
-/** Envio do laudo (ou digitação) → "Confira os valores" → salvar. `rec` = edição de uma leitura. */
+/** Envio do laudo (ou digitação) → "Confira os valores" → salvar. `rec` = edição de uma leitura. `all` null = medidas não carregaram. */
 export function BodyCompSheet({ profile, all, rec, onClose, onSaved }: {
-  profile: Profile; all: Measurement[]; rec?: BodyComp; onClose: () => void; onSaved: (warn?: string) => void;
+  profile: Profile; all: Measurement[] | null; rec?: BodyComp; onClose: () => void; onSaved: (warn?: string) => void;
 }) {
   const tz = profile.timezone;
   const [stage, setStage] = useState<Stage>(rec ? "form" : "pick");
@@ -89,9 +89,11 @@ export function BodyCompSheet({ profile, all, rec, onClose, onSaved }: {
     // O peso do laudo também vira medida, se não houver outra naquele dia.
     let warn: string | undefined;
     const w = parsed.values.weight_kg;
-    if (!rec && w != null && !all.some((m) => localDay(m.measured_at, tz) === localDay(measuredAt, tz))) {
+    if (!rec && w != null && !all) {
+      warn = "Laudo salvo, mas o peso não foi para Peso e medidas: não foi possível carregar suas medidas.";
+    } else if (!rec && w != null && all && !all.some((m) => localDay(m.measured_at, tz) === localDay(measuredAt, tz))) {
       try {
-        await saveMeasurement({ measured_at: measuredAt, weight_kg: w, waist_cm: null, hip_cm: null, neck_cm: null, source: "body_comp" }, profile, undefined, all);
+        warn = await saveMeasurement({ measured_at: measuredAt, weight_kg: w, waist_cm: null, hip_cm: null, neck_cm: null, source: "body_comp" }, profile);
       } catch {
         warn = "Laudo salvo, mas não foi possível registrar o peso em Peso e medidas.";
       }

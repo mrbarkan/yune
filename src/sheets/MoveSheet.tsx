@@ -58,7 +58,7 @@ export function MoveSheet({ profile, activity, onClose, onSaved }: { profile: Pr
           <input inputMode="numeric" value={override} placeholder={String(auto)} onChange={(e) => setOverride(e.target.value.replace(/\D/g, ""))} />
         </label>
       </div>
-      {!profile.weight_kg && <p className="note">Informe seu peso em Ajustes para uma estimativa mais precisa.</p>}
+      {!profile.weight_kg && <p className="note">Informe seu peso em Perfil › Peso e medidas para uma estimativa mais precisa.</p>}
       {err && <p className="note err">{err}</p>}
       <div className="actions">
         <button className="btn primary" disabled={busy} onClick={save}>{activity ? "Salvar alterações" : "Salvar"} · −{kcal} kcal</button>

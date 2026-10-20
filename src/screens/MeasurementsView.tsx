@@ -17,8 +17,8 @@ const SERIES: { key: Key; label: string; unit: string; color: string }[] = [
   { key: "neck_cm", label: "Pescoço", unit: "cm", color: "var(--sleep)" },
 ];
 
-export default function MeasurementsView({ profile, list, onBack, onChanged, startAdding }: {
-  profile: Profile; list: Measurement[]; onBack: () => void; onChanged: () => void; startAdding?: boolean;
+export default function MeasurementsView({ profile, list, loadErr, onBack, onChanged, startAdding }: {
+  profile: Profile; list: Measurement[]; loadErr?: string; onBack: () => void; onChanged: () => void; startAdding?: boolean;
 }) {
   const [sheet, setSheet] = useState<{ rec?: Measurement } | null>(startAdding ? {} : null);
   const [confirm, setConfirm] = useState<string | null>(null);
@@ -35,13 +35,15 @@ export default function MeasurementsView({ profile, list, onBack, onChanged, sta
 
   async function remove(id: string) {
     setErr("");
+    let warn: string | undefined;
     try {
-      await deleteMeasurement(id);
+      warn = await deleteMeasurement(id, profile.id);
     } catch {
       setErr("Não foi possível apagar.");
       return;
     }
     setConfirm(null);
+    if (warn) setErr(warn);
     onChanged();
   }
 
@@ -79,8 +81,8 @@ export default function MeasurementsView({ profile, list, onBack, onChanged, sta
 
       <section className="group">
         <h2 className="section-title">Registros</h2>
-        {!list.length && <p className="empty">Registre seu peso</p>}
-        {err && <p className="note err">{err}</p>}
+        {!list.length && !loadErr && <p className="empty">Registre seu peso</p>}
+        {(loadErr || err) && <p className="note err">{loadErr || err}</p>}
         <ul className="meas-list">
           {[...list].reverse().map((m) => (
             <li key={m.id}>
@@ -110,8 +112,8 @@ export default function MeasurementsView({ profile, list, onBack, onChanged, sta
       </section>
 
       {sheet && (
-        <MeasureSheet profile={profile} all={list} rec={sheet.rec} onClose={close}
-          onSaved={() => { close(); onChanged(); }} />
+        <MeasureSheet profile={profile} rec={sheet.rec} onClose={close}
+          onSaved={(warn) => { close(); setErr(warn ?? ""); onChanged(); }} />
       )}
     </main>
   );

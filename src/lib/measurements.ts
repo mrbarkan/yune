@@ -1,26 +1,42 @@
 import { useEffect, useState } from "react";
-import { addDoc, deleteDoc, getDocs, orderBy, query, updateDoc } from "firebase/firestore";
+import { addDoc, deleteDoc, getDocs, limit, orderBy, query, updateDoc } from "firebase/firestore";
 import { profileDoc, row, rows, table, type Measurement, type Profile } from "./firebase";
 
 const DAY = 86_400_000;
 
 export function useMeasurements(version: number) {
   const [list, setList] = useState<Measurement[]>([]);
+  const [err, setErr] = useState("");
   useEffect(() => {
     let alive = true;
     getDocs(query(table("measurements"), orderBy("measured_at")))
-      .then((snap) => alive && setList(rows<Measurement>(snap)))
-      .catch(() => {});
+      .then((snap) => {
+        if (!alive) return;
+        setList(rows<Measurement>(snap));
+        setErr("");
+      })
+      .catch(() => alive && setErr("Não foi possível carregar as medidas."));
     return () => {
       alive = false;
     };
   }, [version]);
-  return list;
+  return { list, err };
 }
 
-/** O peso do perfil acompanha a medida mais recente; lançamento com data antiga não mexe nele. */
-export function shouldUpdateWeight(all: Measurement[], saved: Measurement) {
-  return all.every((x) => x.id === saved.id || x.measured_at <= saved.measured_at);
+/** O peso do perfil acompanha a medida mais recente (pela data da medida); sem medidas, fica como está. */
+export async function syncProfileWeight(profileId: string) {
+  const snap = await getDocs(query(table("measurements"), orderBy("measured_at", "desc"), limit(1)));
+  const newest = rows<Measurement>(snap)[0];
+  if (newest) await updateDoc(profileDoc(profileId), { weight_kg: newest.weight_kg });
+}
+
+/** Depois de gravar: falha ao sincronizar vira aviso, não erro (tentar de novo duplicaria a medida). */
+export async function syncWeightOrWarn(profileId: string, done: string) {
+  try {
+    await syncProfileWeight(profileId);
+  } catch {
+    return `${done}, mas não foi possível atualizar o peso do perfil.`;
+  }
 }
 
 /** Variação do último peso contra a medida mais perto de 56 dias antes (janela de ±14 dias). */
@@ -39,21 +55,17 @@ export function changeSince(all: Measurement[]): { delta: number; days: number }
 }
 
 /**
- * Grava a medida (create: created_at = agora; edição: created_at fica como está) e, se for a mais
- * recente, atualiza o peso do perfil. Nota: `profile` vem antes de `id?` porque o TS não aceita
- * parâmetro obrigatório depois de opcional.
+ * Grava a medida (create: created_at = agora; edição: created_at fica como está) e alinha o peso do perfil
+ * com a mais recente. Devolve um aviso se a medida foi gravada mas o perfil não.
  */
-export async function saveMeasurement(m: Omit<Measurement, "id">, profile: Profile, id?: string, all: Measurement[] = []) {
+export async function saveMeasurement(m: Omit<Measurement, "id">, profile: Profile, id?: string) {
   const { created_at: _, ...data } = m;
-  let savedId = id;
   if (id) await updateDoc(row("measurements", id), data);
-  else savedId = (await addDoc(table("measurements"), { ...data, created_at: new Date().toISOString() })).id;
-  const saved = { ...m, id: savedId! };
-  if (shouldUpdateWeight(all.filter((x) => x.id !== savedId), saved)) {
-    await updateDoc(profileDoc(profile.id), { weight_kg: m.weight_kg });
-  }
+  else await addDoc(table("measurements"), { ...data, created_at: new Date().toISOString() });
+  return syncWeightOrWarn(profile.id, "Medida salva");
 }
 
-export async function deleteMeasurement(id: string) {
+export async function deleteMeasurement(id: string, profileId: string) {
   await deleteDoc(row("measurements", id));
+  return syncWeightOrWarn(profileId, "Medida apagada");
 }
