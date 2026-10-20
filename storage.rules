@@ -4,39 +4,44 @@ rules_version = '2';
 // Foto de perfil e fotos de evolução: profile-photos|body-photos/<uid>/<arquivo>, até 5 MB, só imagens.
 // Exames e bioimpedância: health-docs/<uid>/<arquivo>, até 10 MB, PDF ou foto.
 // Dieta prescrita: diet-plans/<uid>/<arquivo>, até 10 MB, PDF, Word (.docx), texto ou foto.
+// Só a própria pessoa, com e-mail verificado (como no Firestore).
 service firebase.storage {
   match /b/{bucket}/o {
+    function owner(uid) {
+      return request.auth != null && request.auth.uid == uid && request.auth.token.email_verified == true;
+    }
+
     match /meal-photos/{uid}/{file} {
-      allow read, delete: if request.auth != null && request.auth.uid == uid;
-      allow create: if request.auth != null && request.auth.uid == uid
+      allow read, delete: if owner(uid);
+      allow create: if owner(uid)
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/(jpeg|png|webp)');
     }
 
     match /profile-photos/{uid}/{file} {
-      allow read, delete: if request.auth != null && request.auth.uid == uid;
-      allow create: if request.auth != null && request.auth.uid == uid
+      allow read, delete: if owner(uid);
+      allow create: if owner(uid)
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/(jpeg|png|webp)');
     }
 
     match /body-photos/{uid}/{file} {
-      allow read, delete: if request.auth != null && request.auth.uid == uid;
-      allow create: if request.auth != null && request.auth.uid == uid
+      allow read, delete: if owner(uid);
+      allow create: if owner(uid)
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/(jpeg|png|webp)');
     }
 
     match /health-docs/{uid}/{file} {
-      allow read, delete: if request.auth != null && request.auth.uid == uid;
-      allow create: if request.auth != null && request.auth.uid == uid
+      allow read, delete: if owner(uid);
+      allow create: if owner(uid)
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('application/pdf|image/(jpeg|png|webp)');
     }
 
     match /diet-plans/{uid}/{file} {
-      allow read, delete: if request.auth != null && request.auth.uid == uid;
-      allow create: if request.auth != null && request.auth.uid == uid
+      allow read, delete: if owner(uid);
+      allow create: if owner(uid)
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('application/pdf|application/vnd[.]openxmlformats-officedocument[.]wordprocessingml[.]document|text/plain.*|image/(jpeg|png|webp)');
     }
