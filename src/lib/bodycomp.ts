@@ -7,16 +7,21 @@ import { parseDecimal } from "./num";
 
 export function useBodyComp(version: number) {
   const [list, setList] = useState<BodyComp[]>([]);
+  const [err, setErr] = useState("");
   useEffect(() => {
     let alive = true;
     getDocs(query(table("body_comp"), orderBy("measured_at")))
-      .then((snap) => alive && setList(rows<BodyComp>(snap)))
-      .catch(() => {});
+      .then((snap) => {
+        if (!alive) return;
+        setList(rows<BodyComp>(snap));
+        setErr("");
+      })
+      .catch(() => alive && setErr("Não foi possível carregar a composição corporal."));
     return () => {
       alive = false;
     };
   }, [version]);
-  return list;
+  return { list, err };
 }
 
 /** Faixas aceitas pelo servidor; campo vazio vai como null (0 é recusado). */

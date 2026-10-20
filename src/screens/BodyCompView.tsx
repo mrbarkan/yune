@@ -11,8 +11,8 @@ export const devKey = (d: string) => d.toLowerCase().replace(/\s+/g, "");
 
 type Series = { key: keyof BodyCompValues; label: string; unit: string; color: string };
 
-export default function BodyCompView({ profile, list, measurements, allowed, startAdding, onPro, onBack, onChanged }: {
-  profile: Profile; list: BodyComp[]; measurements: Measurement[]; allowed: boolean; startAdding?: boolean;
+export default function BodyCompView({ profile, list, loadErr, measurements, allowed, startAdding, onPro, onBack, onChanged }: {
+  profile: Profile; list: BodyComp[]; loadErr?: string; measurements: Measurement[]; allowed: boolean; startAdding?: boolean;
   onPro: () => void; onBack: () => void; onChanged: () => void;
 }) {
   const [sheet, setSheet] = useState<{ rec?: BodyComp } | null>(startAdding && allowed ? {} : null);
@@ -106,8 +106,8 @@ export default function BodyCompView({ profile, list, measurements, allowed, sta
 
       <section className="group">
         <h2 className="section-title">Registros</h2>
-        {!list.length && <p className="empty">Envie um laudo de bioimpedância</p>}
-        {err && <p className="note err">{err}</p>}
+        {!list.length && !loadErr && <p className="empty">Envie um laudo de bioimpedância</p>}
+        {(loadErr || err) && <p className="note err">{loadErr || err}</p>}
         <ul className="meas-list">
           {[...list].reverse().map((b) => (
             <li key={b.id}>

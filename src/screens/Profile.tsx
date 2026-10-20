@@ -64,7 +64,7 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
   const photos = useBodyPhotos(version + pv);
   const [body, setBody] = useState<"" | "view" | "add">("");
   const [bv, setBv] = useState(0);
-  const bodyList = useBodyComp(version + bv);
+  const { list: bodyList, err: bodyErr } = useBodyComp(version + bv);
   const [edit, setEdit] = useState(false);
   const closeEdit = useCallback(() => setEdit(false), []);
   const [healthOpen, setHealthOpen] = useState(false);
@@ -92,8 +92,8 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
   const bodyAllowed = canUse(ent, "body_comp");
   if (body) {
     return (
-      <BodyCompView profile={profile} list={bodyList} measurements={list} allowed={bodyAllowed} startAdding={body === "add"}
-        onPro={onPro} onBack={() => setBody("")} onChanged={() => { setBv((n) => n + 1); setMv((n) => n + 1); }} />
+      <BodyCompView profile={profile} list={bodyList} loadErr={bodyErr} measurements={list} allowed={bodyAllowed} startAdding={body === "add"}
+        onPro={onPro} onBack={() => setBody("")} onChanged={() => { setBv((n) => n + 1); setMv((n) => n + 1); onSaved(); }} />
     );
   }
 
@@ -161,7 +161,7 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
           <p className="empty">Registre seu peso</p>
         )}
       </Card>
-      <Card label="Composição corporal" action="+ enviar" locked={!bodyAllowed && !bodyList.length}
+      <Card label="Composição corporal" action="+ enviar" locked={!bodyAllowed && !bodyList.length && !bodyErr}
         onOpen={() => (bodyAllowed ? setBody("add") : onPro())} onPro={onPro}>
         {bodyLast ? (
           <button className="pcard-body" onClick={() => setBody("view")}>
@@ -173,9 +173,10 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
             </div>
             {bodyDelta && deltaText(bodyDelta) && <small>Desde {new Date(bodyDelta.since).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}: <b>{deltaText(bodyDelta)}</b></small>}
           </button>
-        ) : (
+        ) : bodyErr ? null : (
           <p className="empty">Envie um laudo de bioimpedância</p>
         )}
+        {bodyErr && <p className="note err">{bodyErr}</p>}
       </Card>
       <Card label="Exames" action="+ enviar" locked={!canUse(ent, "labs")} onOpen={soon} onPro={onPro}>
         <p className="empty">Envie um exame de sangue</p>
