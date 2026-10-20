@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { clipPlan } from "./dietClip.js";
 
 const sample = () => ({
@@ -29,5 +29,20 @@ describe("clipPlan", () => {
     const p = sample();
     p.meals[0]!.options[0]!.items[0]!.grams = -3;
     expect(clipPlan(p).meals[0]!.options[0]!.items[0]!.grams).toBe(0);
+  });
+});
+
+describe("clipPlan (extras)", () => {
+  it("força strings e corta orientações em 300", () => {
+    const out = clipPlan({ ...sample(), guidelines: ["x".repeat(900), 42 as unknown as string] });
+    expect(out.guidelines[0]).toHaveLength(300);
+    expect(out.guidelines[1]).toBe("42");
+  });
+  it("avisa quando trunca regras", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const rule = sample().rules[0]!;
+    clipPlan({ ...sample(), rules: Array.from({ length: 61 }, () => rule) });
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
   });
 });

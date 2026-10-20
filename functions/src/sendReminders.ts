@@ -5,37 +5,13 @@ import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { defineSecret } from "firebase-functions/params";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import webpush from "web-push";
-import { localNow, safeTimeZone } from "./reminderTime.js";
+import { processUser, type Profile, type Reminders } from "./reminderStep.js";
+import { localNow } from "./reminderTime.js";
 import { REGION } from "./region.js";
 
 const VAPID_PUBLIC_KEY = defineSecret("VAPID_PUBLIC_KEY");
 const VAPID_PRIVATE_KEY = defineSecret("VAPID_PRIVATE_KEY");
 const VAPID_SUBJECT = defineSecret("VAPID_SUBJECT");
-
-type Reminders = {
-  water_enabled: boolean;
-  water_every_min: number;
-  water_start: string;
-  water_end: string;
-  summary_enabled: boolean;
-  summary_time: string;
-  bedtime_enabled: boolean;
-  bedtime_time: string;
-  last_water_at?: string | null;
-  last_summary_date?: string | null;
-  last_bedtime_date?: string | null;
-};
-
-type Profile = { name: string | null; timezone: string; water_goal_ml: number; kcal_goal: number };
-
-const toMin = (t: string) => {
-  const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
-};
-
-const fmt = (n: number) => n.toLocaleString("pt-BR");
-const liters = (ml: number) => (ml / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " L";
-const hm = (min: number) => `${Math.floor(min / 60)}h${String(min % 60).padStart(2, "0")}`;
 
 /** Totais do dia `day` (AAAA-MM-DD) no fuso da pessoa. Sono conta no dia em que se acorda. */
 async function dailyTotals(db: Firestore, uid: string, tz: string, day: string) {
@@ -68,69 +44,29 @@ export const sendReminders = onSchedule(
     const reminders = await db.collection("reminders").get();
     for (const doc of reminders.docs) {
       const uid = doc.id;
+      const user = db.collection("users").doc(uid);
       try {
-        const r = doc.data() as Reminders;
-        const subs = await db.collection("users").doc(uid).collection("push_subscriptions").get();
-        if (subs.empty) continue;
-        const targets = [...subs.docs]
-          .sort((a, b) => String(b.get("created_at") ?? "").localeCompare(String(a.get("created_at") ?? "")))
-          .slice(0, 5);
-        const profileSnap = await db.collection("users").doc(uid).get();
-        if (!profileSnap.exists) continue;
-        const profile = profileSnap.data() as Profile;
-        const tz = safeTimeZone(profile.timezone);
-        const local = localNow(tz);
-        const patch: Partial<Reminders> = {};
-
-        async function send(payload: { title: string; body: string; tag: string }) {
-          let delivered = 0;
-          for (const s of targets) {
-            const { endpoint, p256dh, auth } = s.data();
-            try {
-              await webpush.sendNotification({ endpoint, keys: { p256dh, auth } }, JSON.stringify({ ...payload, url: "/" }), { TTL: 60 * 60, timeout: 10_000 });
-              delivered++;
-            } catch (err) {
-              const status = (err as { statusCode?: number }).statusCode;
-              if (status === 404 || status === 410) await s.ref.delete();
-            }
-          }
-          return delivered;
-        }
-
-        // Resumo do dia
-        if (r.summary_enabled && r.last_summary_date !== local.date && local.minutes >= toMin(r.summary_time)) {
-          const t = await dailyTotals(db, uid, tz, local.date);
-          const net = t.kcal_in - t.kcal_out;
-          const parts = [`${fmt(t.kcal_in)} kcal ingeridas`, `${fmt(t.kcal_out)} gastas`, liters(t.water_ml)];
-          if (t.sleep_min) parts.push(`dormiu ${hm(t.sleep_min)}`);
-          sent += await send({
-            title: `Seu dia: ${fmt(net)} kcal líquidas`,
-            body: parts.join(" · ") + ` — meta ${fmt(profile.kcal_goal)} kcal.`,
-            tag: "summary",
-          });
-          patch.last_summary_date = local.date;
-        }
-
-        // Hora de dormir (janela de 2h após o horário)
-        const bed = toMin(r.bedtime_time);
-        if (r.bedtime_enabled && r.last_bedtime_date !== local.date && local.minutes >= bed && local.minutes < bed + 120) {
-          sent += await send({ title: "Hora de desacelerar", body: "Telas para baixo. Anote quando for dormir.", tag: "bedtime" });
-          patch.last_bedtime_date = local.date;
-        }
-
-        // Água: dentro da janela, se não bebeu (nem foi lembrada) no intervalo
-        const inWindow = local.minutes >= toMin(r.water_start) && local.minutes < toMin(r.water_end);
-        const since = new Date(now.getTime() - r.water_every_min * 60_000);
-        if (r.water_enabled && inWindow && (!r.last_water_at || new Date(r.last_water_at) < since)) {
-          const recent = await db.collection("users").doc(uid).collection("water")
-            .where("drank_at", ">=", since.toISOString()).limit(1).get();
-          if (recent.empty) {
-            sent += await send({ title: "Um copo d'água?", body: `Meta de hoje: ${liters(profile.water_goal_ml)}.`, tag: "water" });
-            patch.last_water_at = now.toISOString();
-          }
-        }
-
-        if (Object.keys(patch).length) await doc.ref.update(patch);
+        sent += await processUser(uid, doc.data() as Reminders, {
+          now,
+          subs: async () => (await user.collection("push_subscriptions").get()).docs.map((s) => ({
+            endpoint: s.get("endpoint"), p256dh: s.get("p256dh"), auth: s.get("auth"),
+            created_at: s.get("created_at") ?? null, remove: async () => { await s.ref.delete(); },
+          })),
+          profile: async () => {
+            const snap = await user.get();
+            return snap.exists ? (snap.data() as Profile) : undefined;
+          },
+          totals: (u, tz, day) => dailyTotals(db, u, tz, day),
+          hasWaterSince: async (_u, since) => !(await user.collection("water").where("drank_at", ">=", since).limit(1).get()).empty,
+          patch: async (_u, patch) => { await doc.ref.update(patch); },
+          push: async (sub, payload) => {
+            await webpush.sendNotification(
+              { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+              JSON.stringify({ ...payload, url: "/" }),
+              { TTL: 60 * 60, timeout: 10_000 },
+            );
+          },
+        });
       } catch (err) {
         failed++;
         console.error("send-reminders: falha", uid, err instanceof Error ? err.name : "erro");

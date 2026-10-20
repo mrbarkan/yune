@@ -1,13 +1,17 @@
 // Limita o plano devolvido pelo modelo antes de gravar: tamanhos, quantidades e faixas.
 type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : v);
+const str = (v: unknown, max: number) => (v == null ? v : String(v).slice(0, max));
 const clamp = (v: unknown, lo: number, hi: number) => {
   const n = typeof v === "number" && Number.isFinite(v) ? v : 0;
   return Math.min(hi, Math.max(lo, n));
 };
 const inRange = (v: unknown, lo: number, hi: number) => (typeof v === "number" && v >= lo && v <= hi ? v : null);
-const list = (v: unknown, max: number): Obj[] => (Array.isArray(v) ? v.slice(0, max) : []);
+const list = (v: unknown, max: number, what = ""): Obj[] => {
+  if (!Array.isArray(v)) return [];
+  if (what && v.length > max) console.warn(`dietClip: ${what} truncado (${v.length} > ${max})`);
+  return v.slice(0, max);
+};
 
 export function clipPlan<T>(p: T): T {
   const o = p as Obj;
@@ -19,7 +23,7 @@ export function clipPlan<T>(p: T): T {
     issued_on: str(o.issued_on, 40),
     summary: str(o.summary, 600),
     notes: str(o.notes, 1000),
-    guidelines: list(o.guidelines, 30).map((g) => str(g, 300)),
+    guidelines: list(o.guidelines, 30).filter((g) => g != null).map((g) => str(g, 300)),
     targets: {
       ...t,
       kcal: inRange(t.kcal, 500, 10000),
@@ -29,7 +33,7 @@ export function clipPlan<T>(p: T): T {
       fiber_g: inRange(t.fiber_g, 0, 200),
       water_ml: inRange(t.water_ml, 0, 10000),
     },
-    meals: list(o.meals, 12).map((m) => ({
+    meals: list(o.meals, 12, "refeições").map((m) => ({
       ...m,
       name: str(m.name, 60),
       time: str(m.time, 5),
@@ -49,7 +53,7 @@ export function clipPlan<T>(p: T): T {
         })),
       })),
     })),
-    rules: list(o.rules, 60).map((r) => ({
+    rules: list(o.rules, 60, "regras").map((r) => ({
       ...r,
       name: str(r.name, 120),
       detail: str(r.detail, 300),
