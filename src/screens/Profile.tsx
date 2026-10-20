@@ -10,6 +10,8 @@ import PhotosView from "@/screens/PhotosView";
 import { sessions, useBodyPhotos } from "@/lib/photos";
 import Settings from "@/screens/Settings";
 import { ProfileEditSheet } from "@/sheets/ProfileEditSheet";
+import { HealthSheet } from "@/sheets/HealthSheet";
+import { completion, useLatestAnamnesis } from "@/lib/anamnesis";
 
 type DietProps = { allowed: boolean; plan: DietPlan | null; onOpen: () => void; onChanged: () => void };
 
@@ -20,8 +22,6 @@ type Props = {
   onSaved: () => void;
   onPro: () => void;
   diet: DietProps;
-  /** Objetivo da pessoa (vem do questionário); sem ele o cabeçalho não mostra nada. */
-  goal?: string;
 };
 
 export function initial(name: string | null) {
@@ -50,7 +50,7 @@ export function Card({ label, action, locked, onOpen, onPro, half, children }: {
   );
 }
 
-export default function Profile({ profile, ent, version, onSaved, onPro, diet, goal }: Props) {
+export default function Profile({ profile, ent, version, onSaved, onPro, diet }: Props) {
   const [settings, setSettings] = useState(false);
   const [meas, setMeas] = useState<"" | "view" | "add">("");
   const [mv, setMv] = useState(0);
@@ -60,6 +60,14 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet, g
   const photos = useBodyPhotos(version + pv);
   const [edit, setEdit] = useState(false);
   const closeEdit = useCallback(() => setEdit(false), []);
+  const [healthOpen, setHealthOpen] = useState(false);
+  const [hv, setHv] = useState(0);
+  const { latest: anam, loaded: anamLoaded } = useLatestAnamnesis(version + hv);
+  const closeHealth = useCallback(() => setHealthOpen(false), []);
+  const bumpHealth = useCallback(() => setHv((n) => n + 1), []);
+  const goalAnswer = anam?.answers.objetivo?.principal;
+  const goal = typeof goalAnswer === "string" && goalAnswer.trim() ? goalAnswer.trim().toLowerCase() : undefined;
+  const healthPct = anam ? completion(anam.answers, profile) : 0;
   // Os demais cartões abrem os detalhes nas próximas tarefas.
   const soon = () => {};
 
@@ -148,11 +156,14 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet, g
             </p>
           </button>
         </Card>
-        <Card label="Sua saúde" half onOpen={soon}>
-          <p className="empty">Conte sobre você</p>
+        <Card label="Sua saúde" half onOpen={() => setHealthOpen(true)}>
+          <button className="pcard-body" onClick={() => setHealthOpen(true)}>
+            <p className="empty">{anam ? `${healthPct}% preenchido` : "Conte sobre você"}</p>
+          </button>
         </Card>
       </div>
 
+      {healthOpen && anamLoaded && <HealthSheet profile={profile} initial={anam?.answers ?? {}} onClose={closeHealth} onSaved={bumpHealth} />}
       {edit && <ProfileEditSheet profile={profile} onClose={closeEdit} onSaved={() => { closeEdit(); onSaved(); }} />}
     </main>
   );
