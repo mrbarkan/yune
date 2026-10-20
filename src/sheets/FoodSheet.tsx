@@ -4,7 +4,8 @@ import { COMMON, SUPPLEMENTS, TACO, fromHistory, fromServing, norm, nutrition, p
 import { compressImage } from "@/lib/image";
 import { dietWarnings, mealFor, optionKcal } from "@/lib/diet";
 import { addDoc, getDocs, limit, orderBy, query as q, updateDoc } from "firebase/firestore";
-import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { PrivateImage } from "@/components/PrivateImage";
+import { deleteObject, ref, uploadBytes } from "firebase/storage";
 import { estimateFood, row, rows, storage, table, type CustomFood, type DietPlan, type FoodItem, type Meal, type Place, type Profile } from "@/lib/firebase";
 import { fmtNum, fmtTime, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
 
@@ -64,7 +65,6 @@ export function FoodSheet({ profile, plan, dietOn, meal, onClose, onSaved }: {
   const [place, setPlace] = useState<Place>(() => meal?.place ?? lastPlace());
   const [query, setQuery] = useState("");
   const [plate, setPlate] = useState<PlateItem[]>(() => (meal ? plateFromMeal(meal) : []));
-  const [savedPhoto, setSavedPhoto] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [label, setLabel] = useState<Label | null>(null);
@@ -110,10 +110,6 @@ export function FoodSheet({ profile, plan, dietOn, meal, onClose, onSaved }: {
     setQuery("");
     navigator.vibrate?.(6);
   };
-
-  useEffect(() => {
-    if (meal?.photo_path) getDownloadURL(ref(storage, meal.photo_path)).then(setSavedPhoto, () => {});
-  }, [meal?.photo_path]);
 
   async function estimate(description: string, image?: Photo | null) {
     setBusy("ai");
@@ -374,7 +370,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, onClose, onSaved }: {
 
       {(plate.length > 0 || photo) && (
         <div className="plate">
-          {(photo || savedPhoto) && <img className="plate-photo" src={photo?.preview ?? savedPhoto!} alt="Foto do prato" />}
+          {photo ? <img className="plate-photo" src={photo.preview} alt="Foto do prato" /> : meal?.photo_path ? <PrivateImage path={meal.photo_path} className="plate-photo" alt="Foto do prato" /> : null}
           <ul>
             {lines.map((l) => (
               <li key={l.id}>

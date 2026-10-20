@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { getDownloadURL, ref } from "firebase/storage";
 import { Sheet } from "@/components/Sheet";
 import { mealFor, optionKcal } from "@/lib/diet";
-import { storage, type DietPlan, type DietRule } from "@/lib/firebase";
+import { openHealthFile } from "@/lib/bodycomp";
+import { type DietPlan, type DietRule } from "@/lib/firebase";
 import { fmtLiters, fmtNum } from "@/lib/time";
 import { mealName } from "./FoodSheet";
 
@@ -29,7 +29,7 @@ export function DietSheet({ plan, onClose }: { plan: DietPlan; onClose: () => vo
   async function openFile() {
     setErr("");
     try {
-      window.open(await getDownloadURL(ref(storage, plan.file_path!)), "_blank", "noopener");
+      await openHealthFile(plan.file_path!);
     } catch {
       setErr("Não foi possível abrir o arquivo.");
     }

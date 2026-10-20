@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Dial } from "@/components/Dial";
 import { splitByDay, totals, useRange } from "@/lib/data";
 import { dietWarnings, mealFor } from "@/lib/diet";
 import { mealName } from "@/sheets/FoodSheet";
 import { deleteDoc } from "firebase/firestore";
-import { deleteObject, getDownloadURL, ref } from "firebase/storage";
+import { deleteObject, ref } from "firebase/storage";
+import { PrivateImage } from "@/components/PrivateImage";
 import { row, storage, type Activity, type DietPlan, type Meal, type Profile, type Sleep, type Table, type Water } from "@/lib/firebase";
 import { addDays, fmtDayLong, fmtDuration, fmtLiters, fmtNum, fmtTime, sameDay, startOfDay } from "@/lib/time";
 
@@ -31,19 +32,9 @@ export default function Today({ profile, version, onChange, plan, dietOn, onOpen
   const t = totals(data);
   const isToday = sameDay(day, new Date());
   const left = profile.kcal_goal - t.kcalIn + t.kcalOut;
-  const [photos, setPhotos] = useState<Record<string, string>>({});
-  const photoKey = data.meals.map((m) => m.photo_path).filter(Boolean).join("|");
   const warnings = plan && dietOn ? dietWarnings(plan, data.meals.flatMap((m) => m.items ?? [])) : [];
   const next = plan && dietOn && isToday ? mealFor(plan, new Date(), mealName(new Date())) : null;
-  const target = plan?.targets;
-
-  useEffect(() => {
-    const paths = photoKey ? photoKey.split("|") : [];
-    if (!paths.length) return;
-    Promise.all(paths.map((p) => getDownloadURL(ref(storage, p)).then((url) => [p, url] as const).catch(() => null))).then((urls) => {
-      setPhotos(Object.fromEntries(urls.filter((u) => u !== null)));
-    });
-  }, [photoKey]);
+  const target = dietOn ? plan?.targets : undefined;
 
   const entries: Entry[] = [
     ...data.meals.map((m) => ({
@@ -130,9 +121,7 @@ export default function Today({ profile, version, onChange, plan, dietOn, onOpen
                 <span className="entry-title">{e.title}</span>
                 <span className="entry-meta">{e.meta}</span>
               </button>
-              {e.meal?.photo_path && photos[e.meal.photo_path] && confirm !== e.id && (
-                <img className="entry-thumb" src={photos[e.meal.photo_path]} alt="" />
-              )}
+              {e.meal?.photo_path && confirm !== e.id && <PrivateImage path={e.meal.photo_path} alt="" className="entry-thumb" />}
               {confirm === e.id && (
                 <span className="entry-actions">
                   <button className="btn small" onClick={() => { setConfirm(null); onEdit(e.edit); }}>Editar</button>
@@ -141,7 +130,7 @@ export default function Today({ profile, version, onChange, plan, dietOn, onOpen
               )}
               {confirm === e.id && e.meal && (
                 <div className="entry-detail">
-                  {e.meal.photo_path && photos[e.meal.photo_path] && <img src={photos[e.meal.photo_path]} alt="Foto do prato" />}
+                  {e.meal.photo_path && <PrivateImage path={e.meal.photo_path} alt="Foto do prato" />}
                   {e.meal.items?.length ? (
                     <ul>
                       {e.meal.items.map((it, i) => (
