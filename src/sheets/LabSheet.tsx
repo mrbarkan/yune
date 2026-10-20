@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { Sheet } from "@/components/Sheet";
 import { readHealthDoc, saveHealthDoc, type LabReport, type LabResult, type LabsDraft, type Profile } from "@/lib/firebase";
 import { deleteHealthFile, uploadHealthFile } from "@/lib/bodycomp";
+import { collectedAtFor } from "@/lib/labreports";
 import { LAB_CATALOG } from "@/lib/labs";
 import { parseDecimal } from "@/lib/num";
 import { localDay } from "@/lib/photos";
@@ -113,8 +114,12 @@ export function LabSheet({ profile, rec, onClose, onSaved }: {
 
   async function save() {
     if (!date) return setMsg("Informe a data da coleta.");
-    const collectedAt = rec && dayOf(rec.collected_at, tz) === date ? rec.collected_at : new Date(`${date}T12:00:00`).toISOString();
-    if (Date.parse(collectedAt) > Date.now()) return setMsg("A data da coleta não pode ser no futuro.");
+    let collectedAt = rec?.collected_at ?? "";
+    if (!(rec && dayOf(rec.collected_at, tz) === date)) {
+      const c = collectedAtFor(date, tz);
+      if ("error" in c) return setMsg(c.error);
+      collectedAt = c.iso;
+    }
     const used = rows.filter((r) => r.name.trim() || r.value.trim() || r.unit.trim() || r.low.trim() || r.high.trim());
     if (!used.length) return setMsg("Inclua ao menos um exame.");
     if (used.length > 80) return setMsg("No máximo 80 exames por laudo.");
@@ -163,7 +168,7 @@ export function LabSheet({ profile, rec, onClose, onSaved }: {
             <label className="field"><span>Laboratório</span>
               <input value={lab} maxLength={120} placeholder="opcional" onChange={(e) => setLab(e.target.value)} /></label>
             <label className="field"><span>Data da coleta</span>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+              <input type="date" max={dayOf(new Date().toISOString(), tz)} value={date} onChange={(e) => setDate(e.target.value)} /></label>
           </div>
           <ul className="lab-rows">
             {rows.map((r) => (

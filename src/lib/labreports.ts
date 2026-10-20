@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { deleteDoc, getDocs, orderBy, query } from "firebase/firestore";
 import { row, rows, table, type LabReport, type LabResult } from "./firebase";
 import { deleteHealthFile } from "./bodycomp";
+import { localDay } from "./photos";
 import { homaIr } from "./health";
 import { normalizeResult, outOfRange } from "./labs";
 
@@ -53,4 +54,11 @@ export function reportHoma(r: LabReport): number | null {
     return x ? normalizeResult(x)!.value : null;
   };
   return homaIr(pick("glicemia"), pick("insulina"));
+}
+
+/** Dia escolhido (AAAA-MM-DD) → ISO da coleta. Meio-dia local, mas nunca depois de agora (hoje de manhã vale); dia futuro → erro. */
+export function collectedAtFor(date: string, tz: string, now = new Date()): { iso: string } | { error: string } {
+  if (date > localDay(now.toISOString(), tz)) return { error: "A data da coleta não pode ser no futuro." };
+  const noon = new Date(`${date}T12:00:00`);
+  return { iso: (noon > now ? now : noon).toISOString() };
 }

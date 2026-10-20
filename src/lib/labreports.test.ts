@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyteSeries, outOfRangeCount, reportHoma } from "./labreports";
+import { analyteSeries, collectedAtFor, outOfRangeCount, reportHoma } from "./labreports";
 import type { LabReport, LabResult } from "./firebase";
 
 const res = (o: Partial<LabResult>): LabResult => ({
@@ -40,5 +40,12 @@ describe("labreports", () => {
     const r = rep("d", "2026-01-01T00:00:00.000Z", [res({ value: 5, unit: "mmol/L" }), res({ code: "insulina", value: 10, unit: "µUI/mL" })]);
     expect(reportHoma(r)).toBeCloseTo((5 * 18.016 * 10) / 405, 3);
     expect(reportHoma(a)).toBeNull();
+  });
+  it("coleta hoje de manhã é aceita, amanhã é recusada", () => {
+    const now = new Date("2026-10-19T12:00:00.000Z"); // 09:00 em São Paulo
+    const today = collectedAtFor("2026-10-19", "America/Sao_Paulo", now);
+    expect("iso" in today && Date.parse(today.iso) <= now.getTime()).toBe(true);
+    expect(collectedAtFor("2026-10-20", "America/Sao_Paulo", now)).toHaveProperty("error");
+    expect(collectedAtFor("2026-10-18", "America/Sao_Paulo", now)).toHaveProperty("iso");
   });
 });
