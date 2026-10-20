@@ -54,3 +54,4 @@ PWA de diário de saúde (comida, movimento, água, sono). Todo texto de interfa
 - Apagar conta (`deleteAccount`, callable com `STRIPE_SECRET_KEY`): exige `confirm: "APAGAR"` e login recente (`auth_time` até 10 min; o app reautentica logo antes, o servidor decide).
   Ordem: apaga o customer na Stripe (cancela as assinaturas na hora; se falhar, nada mais é apagado), depois arquivos em `STORAGE_PREFIXES` (`meal-photos`, `profile-photos`, `body-photos`, `health-docs`, `diet-plans`
   com `/{uid}/`), `users/{uid}` (recursivo), `reminders`, `entitlements`, `billing`, `ai_usage` e por fim o usuário do Auth. No modo de cobrança simulada o `deleteCustomer` é no-op.
+  Depois de apagar, o webhook registra "customer sem uid" nos eventos `subscription.deleted` do customer removido: esperado.

@@ -237,10 +237,10 @@ export async function createPortal(): Promise<{ url?: string; error?: string }> 
 /** Apaga a conta e todos os dados (exige login recente e a palavra APAGAR). */
 export async function deleteAccount(): Promise<{ ok?: true; error?: string; reauth?: true }> {
   try {
-    const res = await httpsCallable(functions, "deleteAccount", { timeout: 120_000 })({ confirm: "APAGAR" });
+    const res = await httpsCallable(functions, "deleteAccount", { timeout: 300_000 })({ confirm: "APAGAR" });
     return res.data as { ok?: true; error?: string; reauth?: true };
   } catch {
-    return { error: "Não foi possível apagar agora. Nada foi cobrado a mais; tente de novo." };
+    return { error: "Não foi possível apagar agora. Parte dos dados pode já ter sido apagada; tente de novo para concluir." };
   }
 }
 

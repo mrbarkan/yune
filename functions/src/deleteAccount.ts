@@ -42,17 +42,22 @@ export async function deleteAccountStep(uid: string, deps: DeleteDeps): Promise<
 
 const code = (err: unknown) => (err as { code?: unknown } | null)?.code;
 
+/** Roda `fn` e ignora só o erro com esse `code` (recurso que já não existe); qualquer outro continua. */
+export async function ignoring(errCode: string, fn: () => Promise<unknown>): Promise<void> {
+  try {
+    await fn();
+  } catch (err) {
+    if (code(err) !== errCode) throw err;
+  }
+}
+
 function realDeps(): DeleteDeps {
   const db = getFirestore();
   return {
     customerId: async (uid) => ((await db.doc(`billing/${uid}`).get()).get("customer_id") as string | undefined) ?? null,
     deleteCustomer: async (id) => {
       if (mockBillingEnabled()) return;
-      try {
-        await new Stripe(STRIPE_SECRET_KEY.value()).customers.del(id);
-      } catch (err) {
-        if (code(err) !== "resource_missing") throw err;
-      }
+      await ignoring("resource_missing", () => new Stripe(STRIPE_SECRET_KEY.value()).customers.del(id));
     },
     deleteFiles: async (prefix) => { await getStorage().bucket().deleteFiles({ prefix }); },
     deleteDocs: async (uid) => {
@@ -64,11 +69,7 @@ function realDeps(): DeleteDeps {
       await Promise.all(usage.docs.map((d) => d.ref.delete()));
     },
     deleteUser: async (uid) => {
-      try {
-        await getAuth().deleteUser(uid);
-      } catch (err) {
-        if (code(err) !== "auth/user-not-found") throw err;
-      }
+      await ignoring("auth/user-not-found", () => getAuth().deleteUser(uid));
     },
   };
 }
@@ -81,7 +82,7 @@ export const deleteAccount = onCall({ region: REGION, secrets: [STRIPE_SECRET_KE
     await deleteAccountStep(uid, realDeps());
     return { ok: true };
   } catch (err) {
-    console.error("deleteAccount", uid, (err as Error | undefined)?.name);
-    return { error: "Não foi possível apagar agora. Nada foi cobrado a mais; tente de novo." };
+    console.error("deleteAccount", uid, (err as Error | undefined)?.name, code(err));
+    return { error: "Não foi possível apagar agora. Parte dos dados pode já ter sido apagada; tente de novo para concluir." };
   }
 });

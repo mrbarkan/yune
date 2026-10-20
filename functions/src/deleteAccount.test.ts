@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkDeleteRequest, deleteAccountStep, REAUTH_SECONDS, STORAGE_PREFIXES, type DeleteDeps } from "./deleteAccount.js";
+import { checkDeleteRequest, deleteAccountStep, ignoring, REAUTH_SECONDS, STORAGE_PREFIXES, type DeleteDeps } from "./deleteAccount.js";
 
 const NOW = 1_800_000_000;
 const auth = (auth_time?: number) => ({ uid: "u1", token: { auth_time } });
@@ -62,5 +62,14 @@ describe("deleteAccountStep", () => {
     const files = calls.filter((c) => c.startsWith("files:"));
     expect(files).toHaveLength(STORAGE_PREFIXES.length);
     for (const f of files) expect(f).toMatch(/\/abc\/$/);
+  });
+});
+
+describe("ignoring", () => {
+  it("engole só o código esperado", async () => {
+    await expect(ignoring("resource_missing", async () => { throw { code: "resource_missing" }; })).resolves.toBeUndefined();
+    await expect(ignoring("resource_missing", async () => { throw { code: "other" }; })).rejects.toEqual({ code: "other" });
+    await expect(ignoring("x", async () => { throw new Error("boom"); })).rejects.toThrow("boom");
+    await expect(ignoring("x", async () => 1)).resolves.toBeUndefined();
   });
 });
