@@ -12,6 +12,9 @@ import Settings from "@/screens/Settings";
 import { ProfileEditSheet } from "@/sheets/ProfileEditSheet";
 import { Sheet } from "@/components/Sheet";
 import { HealthSheet } from "@/sheets/HealthSheet";
+import BodyCompView from "@/screens/BodyCompView";
+import { deltaText, useBodyComp } from "@/lib/bodycomp";
+import { bodyCompDelta } from "@/lib/health";
 import { completion, useLatestAnamnesis } from "@/lib/anamnesis";
 
 type DietProps = { allowed: boolean; plan: DietPlan | null; onOpen: () => void; onChanged: () => void };
@@ -59,6 +62,9 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
   const [photosOpen, setPhotosOpen] = useState(false);
   const [pv, setPv] = useState(0);
   const photos = useBodyPhotos(version + pv);
+  const [body, setBody] = useState<"" | "view" | "add">("");
+  const [bv, setBv] = useState(0);
+  const bodyList = useBodyComp(version + bv);
   const [edit, setEdit] = useState(false);
   const closeEdit = useCallback(() => setEdit(false), []);
   const [healthOpen, setHealthOpen] = useState(false);
@@ -83,6 +89,14 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
     );
   }
 
+  const bodyAllowed = canUse(ent, "body_comp");
+  if (body) {
+    return (
+      <BodyCompView profile={profile} list={bodyList} measurements={list} allowed={bodyAllowed} startAdding={body === "add"}
+        onPro={onPro} onBack={() => setBody("")} onChanged={() => { setBv((n) => n + 1); setMv((n) => n + 1); }} />
+    );
+  }
+
   if (photosOpen) {
     return (
       <PhotosView profile={profile} photos={photos.list} measurements={list} loadErr={photos.err}
@@ -97,6 +111,10 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
   const rce = waistHeight(lastWaist, profile.height_cm);
   const f2 = (n: number) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const weeks = change ? Math.round(change.days / 7) : 0;
+
+  const bodyLast = bodyList[bodyList.length - 1];
+  const bodyMuscle = bodyLast ? (bodyLast.muscle_kg ?? bodyLast.lean_kg) : null;
+  const bodyDelta = bodyLast ? bodyCompDelta(bodyList, bodyLast.device) : null;
 
   const age = profile.birth_year ? new Date().getFullYear() - profile.birth_year : null;
   const bits = [
@@ -143,8 +161,21 @@ export default function Profile({ profile, ent, version, onSaved, onPro, diet }:
           <p className="empty">Registre seu peso</p>
         )}
       </Card>
-      <Card label="Composição corporal" action="+ enviar" locked={!canUse(ent, "body_comp")} onOpen={soon} onPro={onPro}>
-        <p className="empty">Envie um laudo de bioimpedância</p>
+      <Card label="Composição corporal" action="+ enviar" locked={!bodyAllowed && !bodyList.length}
+        onOpen={() => (bodyAllowed ? setBody("add") : onPro())} onPro={onPro}>
+        {bodyLast ? (
+          <button className="pcard-body" onClick={() => setBody("view")}>
+            <small>{bodyLast.device} · {new Date(bodyLast.measured_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</small>
+            <div className="bc-summary">
+              {bodyLast.fat_pct != null && <div><span className="big">{f1(bodyLast.fat_pct)}</span>%<small>gordura</small></div>}
+              {bodyMuscle != null && <div><span className="big">{f1(bodyMuscle)}</span> kg<small>{bodyLast.muscle_kg != null ? "músculo" : "massa magra"}</small></div>}
+              {bodyLast.visceral != null && <div><span className="big">{f1(bodyLast.visceral)}</span><small>visceral</small></div>}
+            </div>
+            {bodyDelta && deltaText(bodyDelta) && <small>Desde {new Date(bodyDelta.since).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}: <b>{deltaText(bodyDelta)}</b></small>}
+          </button>
+        ) : (
+          <p className="empty">Envie um laudo de bioimpedância</p>
+        )}
       </Card>
       <Card label="Exames" action="+ enviar" locked={!canUse(ent, "labs")} onOpen={soon} onPro={onPro}>
         <p className="empty">Envie um exame de sangue</p>

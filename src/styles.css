@@ -480,3 +480,17 @@ input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; bo
 .supp-add { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
 .supp-add input { flex: 1; min-width: 0; }
 .save-state { min-height: 1em; margin-top: 12px; }
+
+/* Composição corporal */
+.bc-summary { display: flex; gap: 18px; }
+.bc-summary .big { font: 400 28px/1 var(--serif); }
+.bc-summary small, .pcard-body > small { display: block; font-size: 12px; color: var(--ink-3); }
+.bc-fields { display: grid; gap: 2px; background: var(--paper-2); border-radius: 14px; padding: 6px 12px; }
+.bc-field { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.bc-field:last-child { border-bottom: 0; }
+.bc-field span { font-size: 14px; color: var(--ink-2); min-width: 0; }
+.bc-field input { width: 120px; min-height: 40px; text-align: right; background: transparent; border: 0; font-size: 16px; color: var(--ink); }
+.bc-field input::placeholder { color: var(--ink-3); font-size: 13px; }
+.chip-static { display: inline-block; justify-self: start; min-height: 0; padding: 4px 10px; font-size: 12px; color: var(--ink-2); }
+.confirm-title { margin: 0; font: 400 22px var(--serif); }
+.note.small { font-size: 12px; color: var(--ink-3); }
