@@ -22,6 +22,7 @@ export default function MeasurementsView({ profile, list, onBack, onChanged, sta
 }) {
   const [sheet, setSheet] = useState<{ rec?: Measurement } | null>(startAdding ? {} : null);
   const [confirm, setConfirm] = useState<string | null>(null);
+  const [err, setErr] = useState("");
   const close = useCallback(() => setSheet(null), []);
 
   const last = list[list.length - 1];
@@ -33,7 +34,13 @@ export default function MeasurementsView({ profile, list, onBack, onChanged, sta
   const rce = waistHeight(waist, profile.height_cm);
 
   async function remove(id: string) {
-    await deleteMeasurement(id).catch(() => {});
+    setErr("");
+    try {
+      await deleteMeasurement(id);
+    } catch {
+      setErr("Não foi possível apagar.");
+      return;
+    }
     setConfirm(null);
     onChanged();
   }
@@ -73,6 +80,7 @@ export default function MeasurementsView({ profile, list, onBack, onChanged, sta
       <section className="group">
         <h2 className="section-title">Registros</h2>
         {!list.length && <p className="empty">Registre seu peso</p>}
+        {err && <p className="note err">{err}</p>}
         <ul className="meas-list">
           {[...list].reverse().map((m) => (
             <li key={m.id}>
@@ -87,7 +95,7 @@ export default function MeasurementsView({ profile, list, onBack, onChanged, sta
               </div>
               {confirm === m.id ? (
                 <div className="meas-actions">
-                  <button className="link" onClick={() => setConfirm(null)}>Manter</button>
+                  <button className="link" onClick={() => { setConfirm(null); setErr(""); }}>Manter</button>
                   <button className="link" onClick={() => remove(m.id)}>Apagar</button>
                 </div>
               ) : (
