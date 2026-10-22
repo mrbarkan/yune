@@ -6,6 +6,7 @@ import { useDietPlan } from "@/lib/diet";
 import { canUse, stripeActive, useEntitlements } from "@/lib/pro";
 import { parseProReturn, withoutProParam } from "@/lib/proReturn";
 import { shouldRefresh } from "@/lib/refresh";
+import { startOfDay } from "@/lib/time";
 import Auth from "@/screens/Auth";
 import Today, { type EditTarget } from "@/screens/Today";
 import Week from "@/screens/Week";
@@ -37,7 +38,15 @@ export default function App() {
 function Shell({ userId }: { userId: string }) {
   const { profile, reload, error: profileError } = useProfile(userId);
   const [retrying, setRetrying] = useState(false);
-  const [tab, setTab] = useState<Tab>("today");
+  const [tab, setTabState] = useState<Tab>("today");
+  // Dia visto em Hoje. Trocar de aba volta para hoje (como antes, quando ficava dentro de Today).
+  const [day, setDay] = useState(() => startOfDay(new Date()));
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    setDay(startOfDay(new Date()));
+  };
+  // Registro novo aberto pelo + nasce no dia visto em Hoje; nas outras abas, agora.
+  const newDay = tab === "today" ? day : undefined;
   const [sheet, setSheet] = useState<SheetKind>(null);
   const [edit, setEdit] = useState<EditTarget | null>(null);
   const [version, setVersion] = useState(0);
@@ -90,7 +99,7 @@ function Shell({ userId }: { userId: string }) {
   return (
     <div className="app">
       {proReturn === "ok" && <p className="note ok pro-return" role="status">Assinatura recebida. O Pro libera em instantes.</p>}
-      {tab === "today" && <Today profile={profile} version={version} onChange={bump} plan={plan} dietOn={dietAllowed} onOpenDiet={() => setSheet("diet")}
+      {tab === "today" && <Today profile={profile} day={day} onDay={setDay} version={version} onChange={bump} plan={plan} dietOn={dietAllowed} onOpenDiet={() => setSheet("diet")}
         onEdit={setEdit} />}
       {tab === "week" && <Week profile={profile} version={version} />}
       {tab === "profile" && (
@@ -129,10 +138,10 @@ function Shell({ userId }: { userId: string }) {
           </div>
         </div>
       )}
-      {sheet === "food" && <FoodSheet profile={profile} plan={plan} dietOn={dietAllowed} onClose={close} onSaved={saved} onProfile={reload} />}
-      {sheet === "move" && <MoveSheet profile={profile} onClose={close} onSaved={saved} />}
-      {sheet === "water" && <WaterSheet profile={profile} onClose={close} onSaved={bump} onProfile={reload} />}
-      {sheet === "sleep" && <SleepSheet onClose={close} onSaved={saved} />}
+      {sheet === "food" && <FoodSheet profile={profile} plan={plan} dietOn={dietAllowed} day={newDay} onClose={close} onSaved={saved} onProfile={reload} />}
+      {sheet === "move" && <MoveSheet profile={profile} day={newDay} onClose={close} onSaved={saved} />}
+      {sheet === "water" && <WaterSheet profile={profile} day={newDay} onClose={close} onSaved={bump} onProfile={reload} />}
+      {sheet === "sleep" && <SleepSheet day={newDay} onClose={close} onSaved={saved} />}
       {edit?.kind === "food" && <FoodSheet profile={profile} plan={plan} dietOn={dietAllowed} meal={edit.rec} onClose={close} onSaved={saved} onProfile={reload} />}
       {edit?.kind === "move" && <MoveSheet profile={profile} activity={edit.rec} onClose={close} onSaved={saved} />}
       {edit?.kind === "water" && <WaterSheet profile={profile} water={edit.rec} onClose={close} onSaved={saved} onProfile={reload} />}

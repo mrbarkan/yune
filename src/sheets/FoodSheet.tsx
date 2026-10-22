@@ -8,7 +8,7 @@ import { addDoc, getDocs, limit, orderBy, query as q, updateDoc } from "firebase
 import { PrivateImage } from "@/components/PrivateImage";
 import { deleteObject, ref, uploadBytes } from "firebase/storage";
 import { estimateFood, row, rows, storage, table, type CustomFood, type DietPlan, type FoodItem, type Meal, type Place, type Profile } from "@/lib/firebase";
-import { fmtNum, fmtTime, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
+import { backfillAt, fmtNum, fmtTime, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
 
 type PlateItem = { id: string; food: Food; portion: Portion; qty: number; ai?: boolean };
 type Photo = { blob: Blob; base64: string; preview: string };
@@ -54,17 +54,19 @@ function fromAiItem(it: FoodItem): Food {
 }
 
 /** Nova refeição, ou a refeição `meal` já salva para corrigir. */
-export function FoodSheet({ profile, plan, dietOn, meal, onClose, onSaved, onProfile }: {
+export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, onProfile }: {
   profile: Profile;
   plan: DietPlan | null;
   dietOn: boolean;
   meal?: Meal;
+  /** Dia visto em Hoje: uma refeição nova num dia anterior começa nessa data. */
+  day?: Date;
   onClose: () => void;
   onSaved: () => void;
   /** Recarrega o perfil (depois de autorizar a IA). */
   onProfile?: () => void;
 }) {
-  const [at, setAt] = useState(() => toLocalInput(meal ? new Date(meal.eaten_at) : new Date()));
+  const [at, setAt] = useState(() => toLocalInput(meal ? new Date(meal.eaten_at) : backfillAt(day ?? new Date(), new Date())));
   const [place, setPlace] = useState<Place>(() => meal?.place ?? lastPlace());
   const [query, setQuery] = useState("");
   const [plate, setPlate] = useState<PlateItem[]>(() => (meal ? plateFromMeal(meal) : []));

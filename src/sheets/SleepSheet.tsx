@@ -2,19 +2,19 @@ import { useEffect, useState } from "react";
 import { Sheet } from "@/components/Sheet";
 import { addDoc, getDocs, limit, orderBy, query, updateDoc, where } from "firebase/firestore";
 import { row, rows, table, type Sleep } from "@/lib/firebase";
-import { addDays, fmtDuration, fmtTime, fromLocalInput, startOfDay, toLocalInput } from "@/lib/time";
+import { addDays, fmtDuration, fmtTime, fromLocalInput, sameDay, startOfDay, toLocalInput } from "@/lib/time";
 
 const at = (base: Date, h: number, m = 0) => new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m);
 
 const MAX_SLEEP_MIN = 20 * 60;
 
-/** Nova noite (ou dormir/acordar agora), ou a noite `sleep` já salva para corrigir. */
-export function SleepSheet({ sleep, onClose, onSaved }: { sleep?: Sleep; onClose: () => void; onSaved: () => void }) {
-  const today = startOfDay(new Date());
+/** Nova noite (ou dormir/acordar agora), ou a noite `sleep` já salva para corrigir. Num dia anterior (`day`), a noite sugerida é a que termina nele. */
+export function SleepSheet({ sleep, day, onClose, onSaved }: { sleep?: Sleep; day?: Date; onClose: () => void; onSaved: () => void }) {
+  const wakeDay = startOfDay(day && !sameDay(day, new Date()) ? day : new Date());
   const [open, setOpen] = useState<Sleep | null>(null);
-  const [bed, setBed] = useState(() => toLocalInput(sleep ? new Date(sleep.bed_at) : at(addDays(today, -1), 23)));
+  const [bed, setBed] = useState(() => toLocalInput(sleep ? new Date(sleep.bed_at) : at(addDays(wakeDay, -1), 23)));
   // Registro aberto (dormindo agora): sugere acordar agora.
-  const [wake, setWake] = useState(() => toLocalInput(sleep ? (sleep.wake_at ? new Date(sleep.wake_at) : new Date()) : at(today, 7)));
+  const [wake, setWake] = useState(() => toLocalInput(sleep ? (sleep.wake_at ? new Date(sleep.wake_at) : new Date()) : at(wakeDay, 7)));
   const [err, setErr] = useState("");
   const minutes = (new Date(wake).getTime() - new Date(bed).getTime()) / 60_000;
 

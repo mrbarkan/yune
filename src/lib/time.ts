@@ -31,6 +31,10 @@ export const toLocalInput = (d: Date) => {
 };
 export const fromLocalInput = (v: string) => new Date(v).toISOString();
 
+/** Horário sugerido para um registro novo: `at` se `day` é hoje; num dia anterior, a mesma hora do dia na data vista. */
+export const backfillAt = (day: Date, at: Date, now = new Date()) =>
+  sameDay(day, now) ? at : new Date(day.getFullYear(), day.getMonth(), day.getDate(), at.getHours(), at.getMinutes());
+
 /** dd/mm no fuso da pessoa; fora do ano corrente (nesse fuso) vira dd/mm/aaaa. */
 export function fmtDayMonth(iso: string, tz: string, now: Date = new Date()) {
   const d = new Date(iso);

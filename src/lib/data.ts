@@ -30,9 +30,9 @@ export async function loadRange(from: Date, to: Date): Promise<DayData> {
   };
 }
 
-/** Total de água de hoje (ml) com uma única consulta. */
-export async function todayWaterMl(now = new Date()): Promise<number> {
-  const from = startOfDay(now);
+/** Total de água do dia de `day` (ml) com uma única consulta. */
+export async function waterMlOn(day: Date): Promise<number> {
+  const from = startOfDay(day);
   const snap = await getDocs(query(table("water"), where("drank_at", ">=", from.toISOString()), where("drank_at", "<", addDays(from, 1).toISOString()), orderBy("drank_at")));
   return rows<Water>(snap).reduce((s, w) => s + w.ml, 0);
 }

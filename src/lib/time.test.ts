@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fmtDayMonth, fmtDuration, toLocalInput } from "./time";
+import { backfillAt, fmtDayMonth, fmtDuration, toLocalInput } from "./time";
 
 describe("time", () => {
   it("toLocalInput usa a hora local", () => {
@@ -18,5 +18,19 @@ describe("fmtDayMonth", () => {
   it("ano no fuso da pessoa (virada do ano)", () => {
     expect(fmtDayMonth("2027-01-01T01:00:00Z", tz, now)).toBe("31/12");
     expect(fmtDayMonth("2027-01-01T04:00:00Z", tz, now)).toBe("01/01/2027");
+  });
+});
+
+describe("backfillAt", () => {
+  const now = new Date(2026, 9, 21, 22, 15);
+  it("hoje: mantém o horário dado", () => {
+    expect(backfillAt(new Date(2026, 9, 21), new Date(2026, 9, 21, 21, 45), now)).toEqual(new Date(2026, 9, 21, 21, 45));
+  });
+  it("dia anterior: mesma hora do dia, na data vista", () => {
+    expect(backfillAt(new Date(2026, 9, 19), now, now)).toEqual(new Date(2026, 9, 19, 22, 15));
+  });
+  it("hoje, com horário de ontem (meia-noite há pouco): não muda", () => {
+    const at = new Date(2026, 9, 20, 23, 50);
+    expect(backfillAt(new Date(2026, 9, 21), at, new Date(2026, 9, 21, 0, 20))).toEqual(at);
   });
 });

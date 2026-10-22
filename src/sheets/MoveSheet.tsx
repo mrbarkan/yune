@@ -3,14 +3,16 @@ import { Segmented, Sheet } from "@/components/Sheet";
 import { ACTIVITIES, estimateBurn, type Intensity } from "@/lib/activity";
 import { addDoc, updateDoc } from "firebase/firestore";
 import { row, table, type Activity, type Profile } from "@/lib/firebase";
-import { fromLocalInput, toLocalInput } from "@/lib/time";
+import { backfillAt, fromLocalInput, toLocalInput } from "@/lib/time";
 
-/** Nova atividade, ou a atividade `activity` já salva para corrigir. */
-export function MoveSheet({ profile, activity, onClose, onSaved }: { profile: Profile; activity?: Activity; onClose: () => void; onSaved: () => void }) {
+/** Nova atividade (no dia `day`, se for um dia anterior), ou a atividade `activity` já salva para corrigir. */
+export function MoveSheet({ profile, activity, day, onClose, onSaved }: {
+  profile: Profile; activity?: Activity; day?: Date; onClose: () => void; onSaved: () => void;
+}) {
   const [kind, setKind] = useState(activity?.kind ?? "Caminhada");
   const [minutes, setMinutes] = useState(activity?.duration_min ?? 30);
   const [intensity, setIntensity] = useState<Intensity>(activity?.intensity ?? "moderada");
-  const [at, setAt] = useState(() => toLocalInput(activity ? new Date(activity.started_at) : new Date(Date.now() - 30 * 60_000)));
+  const [at, setAt] = useState(() => toLocalInput(activity ? new Date(activity.started_at) : backfillAt(day ?? new Date(), new Date(Date.now() - 30 * 60_000))));
   // Calorias que não batem com a estimativa vieram do relógio: continuam fixas.
   const [override, setOverride] = useState(() =>
     activity && activity.kcal !== estimateBurn(activity.kind, activity.duration_min, activity.intensity, profile.weight_kg) ? String(activity.kcal) : "");
