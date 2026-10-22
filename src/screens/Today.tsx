@@ -7,7 +7,7 @@ import { deleteDoc } from "firebase/firestore";
 import { deleteObject, ref } from "firebase/storage";
 import { PrivateImage } from "@/components/PrivateImage";
 import { row, storage, type Activity, type DietPlan, type Meal, type Profile, type Sleep, type Table, type Water } from "@/lib/firebase";
-import { addDays, fmtDayLong, fmtDuration, fmtLiters, fmtNum, fmtTime, sameDay, startOfDay } from "@/lib/time";
+import { addDays, fmtDayLong, fmtDuration, fmtLiters, fmtNum, fmtTime, sameDay } from "@/lib/time";
 
 /** Registro já salvo que volta para a folha correspondente para ser corrigido. */
 export type EditTarget = { kind: "food"; rec: Meal } | { kind: "move"; rec: Activity } | { kind: "water"; rec: Water } | { kind: "sleep"; rec: Sleep };
@@ -16,8 +16,11 @@ type Entry = { id: string; table: Table; at: string; kind: EditTarget["kind"]; t
 
 const PLACE_LABEL = { casa: "em casa", restaurante: "restaurante", delivery: "delivery" } as const;
 
-export default function Today({ profile, version, onChange, plan, dietOn, onOpenDiet, onEdit }: {
+export default function Today({ profile, day, onDay, version, onChange, plan, dietOn, onOpenDiet, onEdit }: {
   profile: Profile;
+  /** Dia visto (início do dia). Fica no App para os registros novos nascerem nesse dia. */
+  day: Date;
+  onDay: (d: Date) => void;
   version: number;
   onChange: () => void;
   plan: DietPlan | null;
@@ -25,7 +28,6 @@ export default function Today({ profile, version, onChange, plan, dietOn, onOpen
   onOpenDiet: () => void;
   onEdit: (t: EditTarget) => void;
 }) {
-  const [day, setDay] = useState(() => startOfDay(new Date()));
   const [confirm, setConfirm] = useState<string | null>(null);
   const { data: raw, loading } = useRange(day, 1, version);
   const data = splitByDay(raw, day);
@@ -61,12 +63,12 @@ export default function Today({ profile, version, onChange, plan, dietOn, onOpen
   return (
     <main className="screen today">
       <header className="day-head">
-        <button className="icon-btn" onClick={() => setDay(addDays(day, -1))} aria-label="Dia anterior">←</button>
+        <button className="icon-btn" onClick={() => onDay(addDays(day, -1))} aria-label="Dia anterior">←</button>
         <div>
           <p className="eyebrow">{isToday ? "Hoje · " : ""}{day.toLocaleDateString("pt-BR", { weekday: "long" })}</p>
           <h1 className="day-title">{fmtDayLong(day)}</h1>
         </div>
-        <button className="icon-btn" onClick={() => setDay(addDays(day, 1))} disabled={isToday} aria-label="Próximo dia">→</button>
+        <button className="icon-btn" onClick={() => onDay(addDays(day, 1))} disabled={isToday} aria-label="Próximo dia">→</button>
       </header>
 
       <div className={loading ? "dial-wrap loading" : "dial-wrap"}>

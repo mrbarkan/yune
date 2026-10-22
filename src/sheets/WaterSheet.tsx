@@ -1,17 +1,21 @@
 import { useEffect, useState } from "react";
 import { Sheet } from "@/components/Sheet";
 import { addDoc, updateDoc } from "firebase/firestore";
-import { todayWaterMl } from "@/lib/data";
+import { waterMlOn } from "@/lib/data";
 import { waterView } from "@/lib/waterView";
 import { DEFAULT_WATER_SIZES, profileDoc, row, table, type Profile, type Water } from "@/lib/firebase";
-import { fmtLiters, fmtNum, fromLocalInput, toLocalInput } from "@/lib/time";
+import { backfillAt, fmtDayLong, fmtLiters, fmtNum, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
 
 const validMl = (ml: number) => Number.isInteger(ml) && ml >= 10 && ml <= 3000;
 
-/** Copos rápidos do dia, ou o registro `water` já salvo para corrigir. */
-export function WaterSheet({ profile, water, onClose, onSaved, onProfile }: {
+const dateOf = (local: string) => local.slice(0, 10);
+
+/** Copos rápidos (agora ou num horário escolhido), ou o registro `water` já salvo para corrigir. */
+export function WaterSheet({ profile, water, day, onClose, onSaved, onProfile }: {
   profile: Profile;
   water?: Water;
+  /** Dia visto em Hoje: num dia anterior os copos começam nessa data. */
+  day?: Date;
   onClose: () => void;
   onSaved: () => void;
   onProfile: () => void;
@@ -23,28 +27,44 @@ export function WaterSheet({ profile, water, onClose, onSaved, onProfile }: {
   const [custom, setCustom] = useState("");
   const [err, setErr] = useState("");
   const [editing, setEditing] = useState<string[] | null>(null);
+  // Horário dos copos novos: null = agora. Escolhido, vale para os próximos copos (registrar tudo à noite).
+  const [at, setAt] = useState<string | null>(() => (day && !sameDay(day, new Date()) ? toLocalInput(backfillAt(day, new Date())) : null));
+  const today = dateOf(toLocalInput(new Date()));
+  const shown = at ? dateOf(at) : today;
   const view = waterView({ base, failed }, added);
   const frac = Math.min((view.total ?? 0) / profile.water_goal_ml, 1);
 
   useEffect(() => {
     if (water) return;
     let alive = true;
-    todayWaterMl().then(
+    waterMlOn(new Date(`${shown}T00:00`)).then(
       (ml) => alive && setBase(ml),
       () => {
         if (!alive) return;
         setFailed(true);
-        setErr("Não foi possível carregar a água de hoje.");
+        setErr(shown === today ? "Não foi possível carregar a água de hoje." : "Não foi possível carregar a água desse dia.");
       },
     );
     return () => {
       alive = false;
     };
-  }, [water]);
+  }, [water, shown, today]);
+
+  // Outro dia: o copo passa a mostrar o total daquele dia.
+  function chooseAt(next: string | null) {
+    if ((next ? dateOf(next) : today) !== shown) {
+      setBase(null);
+      setFailed(false);
+      setAdded(0);
+      setErr("");
+    }
+    setAt(next);
+  }
 
   async function add(ml: number) {
     if (!ml) return;
-    const error = await addDoc(table("water"), { ml, drank_at: new Date().toISOString(), created_at: new Date().toISOString() })
+    const now = new Date().toISOString();
+    const error = await addDoc(table("water"), { ml, drank_at: at ? fromLocalInput(at) : now, created_at: now })
       .then(() => null, () => "Quantidade inválida.");
     if (error) return setErr(error);
     setAdded((a) => a + ml);
@@ -67,10 +87,11 @@ export function WaterSheet({ profile, water, onClose, onSaved, onProfile }: {
 
   return (
     <Sheet title="Água" accent="water" onClose={onClose}>
-      <div className="glass" aria-label={view.total === null ? "Total de hoje indisponível" : `${fmtLiters(view.total)} de ${fmtLiters(profile.water_goal_ml)} litros`}>
+      <div className="glass" aria-label={view.total === null ? `Total ${shown === today ? "de hoje" : "do dia"} indisponível` : `${fmtLiters(view.total)} de ${fmtLiters(profile.water_goal_ml)} litros`}>
         <div className="glass-fill" style={{ height: `${frac * 100}%` }} />
         <span className="big-num">{view.total === null ? "—" : fmtLiters(view.total)}<small>/ {fmtLiters(profile.water_goal_ml)} L</small></span>
       </div>
+      {shown !== today && <p className="note">Água de {fmtDayLong(new Date(`${shown}T00:00`))}</p>}
 
       {editing ? (
         <>
@@ -95,6 +116,17 @@ export function WaterSheet({ profile, water, onClose, onSaved, onProfile }: {
               <button key={i} className="btn ghost" disabled={!view.canAdd} onClick={() => add(ml)}>+{fmtNum(ml)}<small>ml</small></button>
             ))}
           </div>
+          {at === null ? (
+            <button className="link" onClick={() => chooseAt(toLocalInput(new Date()))}>Horário: agora · mudar</button>
+          ) : (
+            <div className="row">
+              <label className="field">
+                <span>Horário dos copos</span>
+                <input type="datetime-local" value={at} onChange={(e) => e.target.value && chooseAt(e.target.value)} />
+              </label>
+              <button className="btn ghost" onClick={() => chooseAt(null)}>Agora</button>
+            </div>
+          )}
           <button className="link" onClick={() => setEditing(sizes.map(String))}>Ajustar copos</button>
           <div className="row">
             <label className="field">

@@ -2,28 +2,31 @@ import { useEffect, useState } from "react";
 import { Sheet } from "@/components/Sheet";
 import { addDoc, getDocs, limit, orderBy, query, updateDoc, where } from "firebase/firestore";
 import { row, rows, table, type Sleep } from "@/lib/firebase";
-import { addDays, fmtDuration, fmtTime, fromLocalInput, startOfDay, toLocalInput } from "@/lib/time";
+import { addDays, fmtDuration, fmtTime, fromLocalInput, sameDay, startOfDay, toLocalInput } from "@/lib/time";
 
 const at = (base: Date, h: number, m = 0) => new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, m);
 
 const MAX_SLEEP_MIN = 20 * 60;
 
-/** Nova noite (ou dormir/acordar agora), ou a noite `sleep` já salva para corrigir. */
-export function SleepSheet({ sleep, onClose, onSaved }: { sleep?: Sleep; onClose: () => void; onSaved: () => void }) {
-  const today = startOfDay(new Date());
+/** Nova noite (ou dormir/acordar agora), ou a noite `sleep` já salva para corrigir. Num dia anterior (`day`), a noite sugerida é a que termina nele. */
+export function SleepSheet({ sleep, day, onClose, onSaved }: { sleep?: Sleep; day?: Date; onClose: () => void; onSaved: () => void }) {
+  // Dia anterior: só a noite daquele dia; "Vou dormir agora" / "Acordei" mexem no registro de agora.
+  const past = !!day && !sameDay(day, new Date());
+  const live = !sleep && !past;
+  const wakeDay = startOfDay(past ? day : new Date());
   const [open, setOpen] = useState<Sleep | null>(null);
-  const [bed, setBed] = useState(() => toLocalInput(sleep ? new Date(sleep.bed_at) : at(addDays(today, -1), 23)));
+  const [bed, setBed] = useState(() => toLocalInput(sleep ? new Date(sleep.bed_at) : at(addDays(wakeDay, -1), 23)));
   // Registro aberto (dormindo agora): sugere acordar agora.
-  const [wake, setWake] = useState(() => toLocalInput(sleep ? (sleep.wake_at ? new Date(sleep.wake_at) : new Date()) : at(today, 7)));
+  const [wake, setWake] = useState(() => toLocalInput(sleep ? (sleep.wake_at ? new Date(sleep.wake_at) : new Date()) : at(wakeDay, 7)));
   const [err, setErr] = useState("");
   const minutes = (new Date(wake).getTime() - new Date(bed).getTime()) / 60_000;
 
   useEffect(() => {
-    if (sleep) return;
+    if (!live) return;
     const since = new Date(Date.now() - 20 * 3_600_000).toISOString();
     getDocs(query(table("sleep"), where("wake_at", "==", null), where("bed_at", ">=", since), orderBy("bed_at", "desc"), limit(1)))
       .then((snap) => setOpen(rows<Sleep>(snap)[0] ?? null));
-  }, [sleep]);
+  }, [live]);
 
   // As regras do Firestore recusam horários inválidos (acordar antes de deitar, mais de 20 h).
   async function run(p: Promise<unknown>) {
@@ -40,7 +43,7 @@ export function SleepSheet({ sleep, onClose, onSaved }: { sleep?: Sleep; onClose
 
   return (
     <Sheet title="Sono" accent="sleep" onClose={onClose}>
-      {sleep ? null : open ? (
+      {!live ? null : open ? (
         <div className="sleep-now">
           <p className="lede">Dormindo desde <b>{fmtTime(open.bed_at)}</b></p>
           <button className="btn primary huge" onClick={() => run(updateDoc(row("sleep", open.id), { wake_at: new Date().toISOString() }))}>
@@ -53,7 +56,7 @@ export function SleepSheet({ sleep, onClose, onSaved }: { sleep?: Sleep; onClose
         </button>
       )}
 
-      {!sleep && <p className="divider"><span>ou registre a noite</span></p>}
+      {live && <p className="divider"><span>ou registre a noite</span></p>}
 
       <div className="row">
         <label className="field">
