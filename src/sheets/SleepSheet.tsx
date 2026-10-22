@@ -10,7 +10,10 @@ const MAX_SLEEP_MIN = 20 * 60;
 
 /** Nova noite (ou dormir/acordar agora), ou a noite `sleep` já salva para corrigir. Num dia anterior (`day`), a noite sugerida é a que termina nele. */
 export function SleepSheet({ sleep, day, onClose, onSaved }: { sleep?: Sleep; day?: Date; onClose: () => void; onSaved: () => void }) {
-  const wakeDay = startOfDay(day && !sameDay(day, new Date()) ? day : new Date());
+  // Dia anterior: só a noite daquele dia; "Vou dormir agora" / "Acordei" mexem no registro de agora.
+  const past = !!day && !sameDay(day, new Date());
+  const live = !sleep && !past;
+  const wakeDay = startOfDay(past ? day : new Date());
   const [open, setOpen] = useState<Sleep | null>(null);
   const [bed, setBed] = useState(() => toLocalInput(sleep ? new Date(sleep.bed_at) : at(addDays(wakeDay, -1), 23)));
   // Registro aberto (dormindo agora): sugere acordar agora.
@@ -19,11 +22,11 @@ export function SleepSheet({ sleep, day, onClose, onSaved }: { sleep?: Sleep; da
   const minutes = (new Date(wake).getTime() - new Date(bed).getTime()) / 60_000;
 
   useEffect(() => {
-    if (sleep) return;
+    if (!live) return;
     const since = new Date(Date.now() - 20 * 3_600_000).toISOString();
     getDocs(query(table("sleep"), where("wake_at", "==", null), where("bed_at", ">=", since), orderBy("bed_at", "desc"), limit(1)))
       .then((snap) => setOpen(rows<Sleep>(snap)[0] ?? null));
-  }, [sleep]);
+  }, [live]);
 
   // As regras do Firestore recusam horários inválidos (acordar antes de deitar, mais de 20 h).
   async function run(p: Promise<unknown>) {
@@ -40,7 +43,7 @@ export function SleepSheet({ sleep, day, onClose, onSaved }: { sleep?: Sleep; da
 
   return (
     <Sheet title="Sono" accent="sleep" onClose={onClose}>
-      {sleep ? null : open ? (
+      {!live ? null : open ? (
         <div className="sleep-now">
           <p className="lede">Dormindo desde <b>{fmtTime(open.bed_at)}</b></p>
           <button className="btn primary huge" onClick={() => run(updateDoc(row("sleep", open.id), { wake_at: new Date().toISOString() }))}>
@@ -53,7 +56,7 @@ export function SleepSheet({ sleep, day, onClose, onSaved }: { sleep?: Sleep; da
         </button>
       )}
 
-      {!sleep && <p className="divider"><span>ou registre a noite</span></p>}
+      {live && <p className="divider"><span>ou registre a noite</span></p>}
 
       <div className="row">
         <label className="field">
