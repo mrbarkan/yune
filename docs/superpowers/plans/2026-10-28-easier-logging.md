@@ -249,7 +249,7 @@ Behavior:
   - `mealDrinkMl(items: FoodItem[] | null | undefined): number`: the sum of `it.ml ?? 0`.
 
 `isDrinkName` matches on `norm(name)`:
-- **Yes** (whole words, `\b…\b`): `suco`, `refrigerante`, `cafe` (but not `po`/`torrado`), `cha`, `leite` (but not `condensado|em po|pudim|chocolate ao leite|doce de leite|creme de leite|pao de leite|bolo|mingau|arroz doce`), `agua de coco`, `bebida`, `shake`, `vitamina` (but not `vitamina [a-e]\b`), `isotonic`, `kombucha`, `cappuccino|capuccino` (but not `po`), `caldo de cana`, `limonada`, `mate`, `achocolatado` (but not `po`), `iogurte liquido|bebida lactea`. Word boundaries keep "salsicha", "bolacha" and "tomate" out.
+- **Yes** (whole words, `\b…\b`): `suco`, `refrigerante`, `cafe` (but not `po`/`torrado`), `cha`, `leite` (but not `condensado|em po|pudim|chocolate ao leite|doce de leite|creme de leite|pao de leite|bolo|mingau|arroz doce`), `agua de coco`, `bebida`, `shake`, `vitamina` (but not `vitamina [a-e]\b`), `isotonic`, `kombucha`, `cappuccino|capuccino` (but not `po`), `caldo de cana|cana caldo`, `limonada`, `mate`, `achocolatado` (but not `po`), `iogurte liquido|bebida lactea`. Word boundaries keep "salsicha", "bolacha" and "tomate" out.
 - **No:** a `\bpo\b` word, or alcohol.
 
 For recipes, `recipeFood` adds `drink: r.yield_unit === "ml"`.
@@ -371,6 +371,7 @@ The Excel export: the "Água" sheet becomes columns `["Data", "ml", "Tipo"]`. Wa
     - Gaps between consecutive logged meals of the day (sorted) where `to - from >= GAP_MS`.
     - **The trailing gap** from the last meal to `min(now, windowEnd)` for today, or `windowEnd` for a past day, when ≥ `GAP_MS`.
     - No leading gap: a missing breakfast is covered by `missingSlots`.
+    - A trailing gap for today keeps its key (the last meal time) while it grows, so a "Nada" answered at 17:30 also closes it at 21:30. That's intended.
   - `missingSlots(mealsAt: string[], day: Date, now: Date): MissingSlot[]`: Café (5–11), Almoço (11–15) and Jantar (18–23) with no meal whose `mealName` is that slot. A slot is asked about only after its "ask" time: Café from 11:00, Almoço from 15:00, **Jantar from 21:00** (so the 21:30 review can ask about dinner). For past days, all of them.
   - `snackChips(history: Meal[], limit = 6): Meal[]`: meals whose `mealName(eaten_at)` is "Lanche" or "Ceia" and that have `items?.length`, grouped by `norm(description)`, ranked by count (ties → most recent), returning the most recent meal of each group.
   - `slotChips(history: Meal[], slot: MissingSlot["slot"], limit = 4): Meal[]`: the same grouping for one slot.
@@ -381,7 +382,7 @@ The Excel export: the "Água" sheet becomes columns `["Data", "ml", "Tipo"]`. Wa
     - All with window 09:00–21:00:
     - Meals at 08:40, 12:30 and 20:10 on 2026-10-27, with now = 21:30 → one gap `{ from: 12:30, to: 20:10 }`. The trailing 20:10→21:00 gap is under 4 h.
     - Meals at 08:40 and 10:00, now = 13:00 → no gap (the trailing gap is 3 h).
-    - Meals at 08:00 and 13:00, now = 21:30 → the trailing gap `{ from: 13:00, to: 21:00 }`.
+    - Meals at 10:00 and 13:00, now = 21:30 → only the trailing gap `{ from: 13:00, to: 21:00 }`.
     - A past day with one meal at 08:00 → the trailing gap 08:00→21:00.
   - **Missing slots:**
     - Meals [12:30] at 21:30 today → `["Café da manhã", "Jantar"]`.
@@ -535,7 +536,7 @@ The gap nudge step, after the water step:
 if (r.gap_enabled !== false && inWindow && !(await d.sleepingNow(uid))) {
   windowStart = new Date(d.now.getTime() - (local.minutes - toMin(r.water_start)) * 60_000)   // inWindow ⇒ non-negative; off by DST shifts, accepted
   last = await d.lastMealAt(uid)
-  gapStart = max(last, windowStart)
+  gapStart = max(last, windowStart.toISOString())   // both ISO strings, compared as strings
   count = r.gap_count_date === local.date ? r.gap_count ?? 0 : 0
   if (now - gapStart >= 4h && count < 2 && (!r.last_gap_at || r.last_gap_at < gapStart)) {
     title = last && last >= windowStart ? `Beliscou algo ${slotPhrase(localNow(tz, new Date(last)).minutes)}?` : "Beliscou algo hoje?"
