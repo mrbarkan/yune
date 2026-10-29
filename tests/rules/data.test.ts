@@ -136,6 +136,13 @@ describe("regras: dados", () => {
     }));
   });
 
+  it("meals: item de bebida (ml) é aceito", async () => {
+    const item = { name: "Suco de laranja", quantity: "300 ml", grams: 300, kcal: 120, protein_g: 2, carbs_g: 28, fat_g: 0, ml: 300 };
+    await assertSucceeds(setDoc(doc(alice(), "users/alice/meals/m1"), {
+      eaten_at: NOW, description: "Suco de laranja", kcal: 120, items: [item], source: "manual", place: "casa", created_at: NOW,
+    }));
+  });
+
   it("bob não lê nem cria em meals da alice", async () => {
     await seed("users/alice/meals/m1", { description: "x" });
     await assertFails(getDoc(doc(bob(), "users/alice/meals/m1")));

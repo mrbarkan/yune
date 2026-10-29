@@ -57,6 +57,7 @@ export function recipeFood(r: Recipe): Food {
     name: r.name,
     source: "receita",
     recipe_id: r.id,
+    drink: r.yield_unit === "ml",
     kcal: per100(t.kcal),
     protein: per100(t.protein_g),
     carbs: per100(t.carbs_g),

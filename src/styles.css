@@ -328,13 +328,29 @@ input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 26p
 input[type="range"]::-moz-range-track { height: 2px; background: var(--line); }
 input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; border-radius: 50%; background: var(--accent); }
 
-.glass { position: relative; height: 200px; border-radius: 18px; overflow: hidden; background: var(--paper-2); display: grid; place-items: center; }
+.glass { position: relative; height: 200px; border-radius: 18px; overflow: hidden; background: var(--paper-2); display: grid; place-items: center; align-content: center; gap: 6px; }
 .glass-fill { position: absolute; left: 0; right: 0; bottom: 0; background: var(--water); opacity: 0.4; transition: height 0.9s var(--ease); }
 .glass-fill::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--water); }
-.glass .big-num { position: relative; }
+/* Bebidas: tinta clara no fundo (não opacity, que apagaria a linha do topo, desenhada em --water cheio). */
+.glass-fill.drinks { opacity: 1; background: color-mix(in srgb, var(--water) 18%, transparent); transition: height 0.9s var(--ease), bottom 0.9s var(--ease); }
+.glass .big-num, .glass-sub { position: relative; }
+.glass-sub { font-size: 12px; color: var(--ink-2); }
 .water-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .water-buttons .btn { padding: 0; }
 .water-buttons .btn.on { border-color: var(--accent); color: var(--accent); }
+/* Meus recipientes: pares botão + ½, em duas colunas (1 a 6). */
+.containers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.container { display: flex; gap: 6px; min-width: 0; }
+.container .btn { flex-direction: column; gap: 2px; padding: 0 10px; }
+.container .btn:first-child { flex: 1; min-width: 0; }
+.container .btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.container .btn small { margin: 0; }
+.container .btn.half { width: 44px; flex: none; padding: 0; font-size: 17px; }
+.container-edit { display: grid; gap: 8px; }
+.container-row { display: grid; grid-template-columns: minmax(0, 1fr) 92px repeat(3, 32px); gap: 4px; align-items: center; }
+.container-row .field input { padding: 8px 0; font-size: 16px; }
+.container-row .water-size { min-height: 44px; }
+.container-row .icon-btn { width: 32px; height: 40px; font-size: 16px; }
 .water-size { display: flex; align-items: baseline; justify-content: center; gap: 2px; min-height: 52px; border: 1px solid var(--accent); border-radius: 99px; padding: 0 10px; }
 .water-size input { width: 100%; min-width: 0; border: 0; background: none; outline: none; text-align: right; font: 500 16px var(--mono); color: var(--ink); align-self: center; }
 .water-size small { font-size: 11px; color: var(--ink-3); }

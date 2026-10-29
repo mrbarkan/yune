@@ -18,6 +18,9 @@ PWA de diário de saúde (comida, movimento, água, sono). Todo texto de interfa
   vira alimento da busca (valores por 100 g do rendimento). No FoodSheet, "Fiz mais do que comi" (`BatchCard`) salva o preparo e deixa no prato só a porção comida
   (item com `recipe_id`); com 2+ itens, a fileira de escala muda o prato inteiro. Ajustes › Minhas receitas renomeia, muda o rendimento, edita ingredientes
   (FoodSheet com `recipe`) e apaga; mexer numa receita nunca muda as refeições já registradas (cada uma guarda seus próprios itens).
+- Bebidas: `items[].ml` é gravado ao salvar por `drinkMl` (`src/lib/fluids.ts`, pelo nome; álcool nunca conta). Água do dia = água + bebidas em todo lugar
+  (app, `sendReminders`, exportação). O copo mostra a água pura na camada cheia e as bebidas numa camada mais clara. Recipientes em `water_containers`
+  no perfil (1 a 6 `{ name, ml }`; sem eles, vêm de `water_sizes`), com ½.
 - Dieta prescrita (Pro): o app envia o arquivo para `diet-plans/{uid}/` no Storage (ou o texto colado) e chama `importDietPlan`,
   que grava o plano em `users/{uid}/diet_plans` (a nova substitui e apaga as anteriores, em `functions/src/dietReplace.ts`; o app só liga/desliga e apaga). Avisos e "Pela dieta" em `src/lib/diet.ts`.
 - Consentimento da IA: `users/{uid}.ai_consent = { at, version }` (ou ausente/null). `AI_CONSENT_VERSION` igual em `src/lib/consent.ts` e `functions/src/consent.ts`

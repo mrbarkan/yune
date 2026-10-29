@@ -11,3 +11,5 @@ export const DEFAULT_REMINDERS: Omit<Reminders, "user_id"> = {
   summary_enabled: true, summary_time: "21:30", bedtime_enabled: false, bedtime_time: "23:00",
   push_details: false,
 };
+
+export const DEFAULT_WATER_SIZES = [150, 250, 350, 500];

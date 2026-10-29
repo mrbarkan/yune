@@ -19,7 +19,8 @@ export type Reminders = {
 
 export type Profile = { name: string | null; timezone: string; water_goal_ml: number; kcal_goal: number };
 export type Sub = { endpoint: string; p256dh: string; auth: string; created_at?: string | null; remove(): Promise<void> };
-export type Totals = { kcal_in: number; kcal_out: number; water_ml: number; sleep_min: number };
+/** `water_ml` é só a água pura; `drinks_ml`, as bebidas das refeições (as duas somam na meta). */
+export type Totals = { kcal_in: number; kcal_out: number; water_ml: number; drinks_ml: number; sleep_min: number };
 export type Payload = { title: string; body: string; tag: string };
 
 export type Deps = {
@@ -42,6 +43,12 @@ const toMin = (t: string) => {
 };
 const fmt = (n: number) => n.toLocaleString("pt-BR");
 const liters = (ml: number) => (ml / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " L";
+/** "1,6 L (1,1 L de água)"; só "1,6 L" quando os dois arredondam igual (como o rótulo do copo no app). */
+const fluid = (t: Totals) => {
+  const total = liters(t.water_ml + t.drinks_ml);
+  const water = liters(t.water_ml);
+  return total === water ? total : `${total} (${water} de água)`;
+};
 const hm = (min: number) => `${Math.floor(min / 60)}h${String(min % 60).padStart(2, "0")}`;
 
 /** Devolve quantas notificações foram entregues. Cada lembrete grava seu last_* logo após o envio. */
@@ -81,7 +88,7 @@ export async function processUser(uid: string, r: Reminders, d: Deps): Promise<n
     if (r.push_details === true) {
       const t = await d.totals(uid, tz, local.date);
       const net = t.kcal_in - t.kcal_out;
-      const parts = [`${fmt(t.kcal_in)} kcal ingeridas`, `${fmt(t.kcal_out)} gastas`, liters(t.water_ml)];
+      const parts = [`${fmt(t.kcal_in)} kcal ingeridas`, `${fmt(t.kcal_out)} gastas`, fluid(t)];
       if (t.sleep_min) parts.push(`dormiu ${hm(t.sleep_min)}`);
       payload = { title: `Seu dia: ${fmt(net)} kcal líquidas`, body: parts.join(" · ") + ` — meta ${fmt(profile.kcal_goal)} kcal.`, tag: "summary" };
     }

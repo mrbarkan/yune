@@ -13,7 +13,7 @@ const mk = (hhmm: string): Reminders => ({
 let r: Reminders = mk("00:30");
 let NOW = CLOCKS[0]!.now;
 const sub = (n: number): Sub => ({ endpoint: `e${n}`, p256dh: "p", auth: "a", created_at: `2026-01-0${n}T00:00:00Z`, remove: async () => {} });
-const totals = { kcal_in: 1, kcal_out: 0, water_ml: 0, sleep_min: 0 };
+const totals = { kcal_in: 1, kcal_out: 0, water_ml: 0, drinks_ml: 0, sleep_min: 0 };
 
 function deps(over: Partial<Deps> = {}): Deps & { patches: Record<string, unknown>[]; pushed: string[] } {
   const patches: Record<string, unknown>[] = [];
@@ -56,6 +56,19 @@ describe.each(CLOCKS)("processUser com relógio $label", ({ now, hhmm }) => {
     await processUser("u", { ...r, push_details: true, bedtime_enabled: false, water_enabled: true }, d);
     expect(payloads.find((p) => p.tag === "summary")?.title).toBe("Seu dia: 1 kcal líquidas");
     expect(payloads.find((p) => p.tag === "water")?.body).toBe("Meta de hoje: 2 L.");
+  });
+
+  it("resumo detalhado mostra a água pura à parte quando há bebidas", async () => {
+    const body = async (t: typeof totals) => {
+      const payloads: { body: string }[] = [];
+      const d = deps({ totals: async () => t, push: async (_s, p) => { payloads.push(p); } });
+      await processUser("u", { ...r, push_details: true, bedtime_enabled: false }, d);
+      return payloads[0]!.body;
+    };
+    expect(await body({ ...totals, water_ml: 1100, drinks_ml: 500 })).toContain("· 1,6 L (1,1 L de água) —");
+    expect(await body({ ...totals, water_ml: 1100 })).toContain("· 1,1 L —");
+    // Arredondam igual: só o total, como o rótulo do copo.
+    expect(await body({ ...totals, water_ml: 1100, drinks_ml: 20 })).toContain("· 1,1 L —");
   });
 
   it("usa só as 5 assinaturas mais novas", async () => {

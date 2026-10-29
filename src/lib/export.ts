@@ -70,7 +70,10 @@ export function exportTables(d: ExportData, tz: string): ExportTable[] {
       rows: byDate(d.meals, (m) => m.eaten_at).flatMap((m): Cell[][] => m.items?.length
         ? m.items.map((it) => [f(m.eaten_at), m.description, it.name, it.grams, it.kcal, it.protein_g, it.carbs_g, it.fat_g])
         : [[f(m.eaten_at), m.description, m.description, null, m.kcal, m.protein_g, m.carbs_g, m.fat_g]]) },
-    { name: "Água", columns: ["Data", "ml"], rows: byDate(d.water, (w) => w.drank_at).map((w) => [f(w.drank_at), w.ml]) },
+    { name: "Água", columns: ["Data", "ml", "Tipo"], rows: byDate([
+      ...d.water.map((w) => ({ at: w.drank_at, ml: w.ml, kind: "Água" })),
+      ...d.meals.flatMap((m) => (m.items ?? []).filter((it) => (it.ml ?? 0) > 0).map((it) => ({ at: m.eaten_at, ml: it.ml!, kind: it.name }))),
+    ], (r) => r.at).map((r): Cell[] => [f(r.at), r.ml, r.kind]) },
     { name: "Sono", columns: ["Dormiu", "Acordou", "Duração (min)"],
       rows: byDate(d.sleep, (s) => s.bed_at).map((s) => [
         f(s.bed_at), f(s.wake_at), s.wake_at && s.bed_at ? Math.round((Date.parse(s.wake_at) - Date.parse(s.bed_at)) / 60_000) : null,

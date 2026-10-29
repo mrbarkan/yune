@@ -1,14 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Sheet } from "@/components/Sheet";
 import { addDoc, updateDoc } from "firebase/firestore";
-import { waterMlOn } from "@/lib/data";
-import { waterView } from "@/lib/waterView";
-import { DEFAULT_WATER_SIZES, profileDoc, row, table, type Profile, type Water } from "@/lib/firebase";
+import { fluidsOn } from "@/lib/data";
+import { fluidLabel } from "@/lib/fluids";
+import { containersOf, validContainers, waterView, type Fluids } from "@/lib/waterView";
+import { profileDoc, row, table, type Profile, type Water } from "@/lib/firebase";
 import { backfillAt, fmtDayLong, fmtLiters, fmtNum, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
 
 const validMl = (ml: number) => Number.isInteger(ml) && ml >= 10 && ml <= 3000;
 
 const dateOf = (local: string) => local.slice(0, 10);
+
+// Meio recipiente; nunca abaixo de 10 ml (mínimo das regras).
+const half = (ml: number) => Math.max(10, Math.round(ml / 2));
+
+type Draft = { key: number; name: string; ml: string };
 
 /** Copos rápidos (agora ou num horário escolhido), ou o registro `water` já salvo para corrigir. */
 export function WaterSheet({ profile, water, day, onClose, onSaved, onProfile }: {
@@ -20,25 +26,32 @@ export function WaterSheet({ profile, water, day, onClose, onSaved, onProfile }:
   onSaved: () => void;
   onProfile: () => void;
 }) {
-  const sizes = profile.water_sizes?.length === 4 ? profile.water_sizes : DEFAULT_WATER_SIZES;
-  const [base, setBase] = useState<number | null>(null);
+  const containers = containersOf(profile);
+  const [base, setBase] = useState<Fluids | null>(null);
   const [added, setAdded] = useState(0);
   const [failed, setFailed] = useState(false);
   const [custom, setCustom] = useState("");
   const [err, setErr] = useState("");
-  const [editing, setEditing] = useState<string[] | null>(null);
+  const [editing, setEditing] = useState<Draft[] | null>(null);
+  const nextKey = useRef(0);
   // Horário dos copos novos: null = agora. Escolhido, vale para os próximos copos (registrar tudo à noite).
   const [at, setAt] = useState<string | null>(() => (day && !sameDay(day, new Date()) ? toLocalInput(backfillAt(day, new Date())) : null));
   const today = dateOf(toLocalInput(new Date()));
   const shown = at ? dateOf(at) : today;
   const view = waterView({ base, failed }, added);
-  const frac = Math.min((view.total ?? 0) / profile.water_goal_ml, 1);
+  // Duas camadas: água pura embaixo, bebidas das refeições por cima (as duas juntas até 100%).
+  const waterFrac = Math.min((view.water ?? 0) / profile.water_goal_ml, 1);
+  const drinksFrac = Math.min((view.drinks ?? 0) / profile.water_goal_ml, 1 - waterFrac);
+  const goal = fmtLiters(profile.water_goal_ml);
+  const label = view.total === null
+    ? `Total ${shown === today ? "de hoje" : "do dia"} indisponível`
+    : `${fmtLiters(view.total)} de ${goal} litros${view.drinks ? `: ${fmtLiters(view.water ?? 0)} de água e ${fmtLiters(view.drinks)} de bebidas das refeições` : ""}`;
 
   useEffect(() => {
     if (water) return;
     let alive = true;
-    waterMlOn(new Date(`${shown}T00:00`)).then(
-      (ml) => alive && setBase(ml),
+    fluidsOn(new Date(`${shown}T00:00`)).then(
+      (f) => alive && setBase(f),
       () => {
         if (!alive) return;
         setFailed(true);
@@ -72,48 +85,95 @@ export function WaterSheet({ profile, water, day, onClose, onSaved, onProfile }:
     onSaved();
   }
 
-  async function saveSizes() {
-    const next = editing!.map(Number);
-    if (!next.every(validMl)) return setErr("Use valores entre 10 e 3000 ml.");
+  const draft = (name: string, ml: string): Draft => ({ key: nextKey.current++, name, ml });
+
+  function startEditing() {
     setErr("");
-    const error = await updateDoc(profileDoc(profile.id), { water_sizes: [...next].sort((a, b) => a - b) })
+    setEditing(containers.map((c) => draft(c.name, String(c.ml))));
+  }
+
+  function patch(i: number, change: Partial<Draft>) {
+    setEditing(editing!.map((d, j) => (j === i ? { ...d, ...change } : d)));
+  }
+
+  function move(i: number, by: -1 | 1) {
+    const next = [...editing!];
+    [next[i], next[i + by]] = [next[i + by], next[i]];
+    setEditing(next);
+  }
+
+  async function saveContainers() {
+    // ml vazio vira NaN, que validContainers recusa.
+    const next = editing!.map((d) => ({ name: d.name.trim(), ml: d.ml ? Number(d.ml) : NaN }));
+    const invalid = validContainers(next);
+    if (invalid) return setErr(invalid);
+    setErr("");
+    const error = await updateDoc(profileDoc(profile.id), { water_containers: next })
       .then(() => null, () => "Não foi possível salvar.");
     if (error) return setErr(error);
     setEditing(null);
     onProfile();
   }
 
-  if (water) return <EditWater water={water} sizes={sizes} onClose={onClose} onSaved={onSaved} />;
+  if (water) {
+    return <EditWater water={water} sizes={[...new Set(containers.map((c) => c.ml))]} onClose={onClose} onSaved={onSaved} />;
+  }
 
   return (
     <Sheet title="Água" accent="water" onClose={onClose}>
-      <div className="glass" aria-label={view.total === null ? `Total ${shown === today ? "de hoje" : "do dia"} indisponível` : `${fmtLiters(view.total)} de ${fmtLiters(profile.water_goal_ml)} litros`}>
-        <div className="glass-fill" style={{ height: `${frac * 100}%` }} />
-        <span className="big-num">{view.total === null ? "—" : fmtLiters(view.total)}<small>/ {fmtLiters(profile.water_goal_ml)} L</small></span>
+      <div className="glass" role="img" aria-label={label}>
+        <div className="glass-fill" style={{ height: `${waterFrac * 100}%` }} />
+        {drinksFrac > 0 && <div className="glass-fill drinks" style={{ bottom: `${waterFrac * 100}%`, height: `${drinksFrac * 100}%` }} />}
+        <span className="big-num">{view.total === null ? "—" : fmtLiters(view.total)}<small>/ {goal} L</small></span>
+        {view.total !== null && view.drinks ? <small className="glass-sub">{fluidLabel(view.total, view.water ?? 0)}</small> : null}
       </div>
       {shown !== today && <p className="note">Água de {fmtDayLong(new Date(`${shown}T00:00`))}</p>}
 
       {editing ? (
         <>
-          <div className="water-buttons">
-            {editing.map((v, i) => (
-              <label key={i} className="water-size">
-                <input inputMode="numeric" value={v} aria-label={`Copo ${i + 1} (ml)`}
-                  onChange={(e) => setEditing(editing.map((x, j) => (j === i ? e.target.value.replace(/\D/g, "") : x)))} />
-                <small>ml</small>
-              </label>
-            ))}
+          <p className="eyebrow">Meus recipientes</p>
+          <div className="container-edit">
+            {editing.map((d, i) => {
+              const what = d.name.trim() || `recipiente ${i + 1}`;
+              return (
+              <div key={d.key} className="container-row">
+                <label className="field">
+                  <input value={d.name} maxLength={40} placeholder="Nome" aria-label={`Nome do recipiente ${i + 1}`}
+                    onChange={(e) => patch(i, { name: e.target.value })} />
+                </label>
+                <label className="water-size">
+                  <input inputMode="numeric" value={d.ml} aria-label={`${what} (ml)`}
+                    onChange={(e) => patch(i, { ml: e.target.value.replace(/\D/g, "") })} />
+                  <small>ml</small>
+                </label>
+                <button className="icon-btn" disabled={i === 0} aria-label={`Subir ${what}`} onClick={() => move(i, -1)}>↑</button>
+                <button className="icon-btn" disabled={i === editing.length - 1} aria-label={`Descer ${what}`} onClick={() => move(i, 1)}>↓</button>
+                <button className="icon-btn" disabled={editing.length === 1} aria-label={`Remover ${what}`}
+                  onClick={() => setEditing(editing.filter((_, j) => j !== i))}>×</button>
+              </div>
+              );
+            })}
           </div>
+          {editing.length < 6 && (
+            <button className="link" onClick={() => setEditing([...editing, draft("", "")])}>Adicionar recipiente</button>
+          )}
           <div className="row">
             <button className="btn ghost" onClick={() => { setEditing(null); setErr(""); }}>Cancelar</button>
-            <button className="btn primary" onClick={saveSizes}>Salvar copos</button>
+            <button className="btn primary" onClick={saveContainers}>Salvar</button>
           </div>
         </>
       ) : (
         <>
-          <div className="water-buttons">
-            {sizes.map((ml, i) => (
-              <button key={i} className="btn ghost" disabled={!view.canAdd} onClick={() => add(ml)}>+{fmtNum(ml)}<small>ml</small></button>
+          <div className="containers">
+            {containers.map((c, i) => (
+              <div key={i} className="container">
+                <button className="btn ghost" disabled={!view.canAdd} onClick={() => add(c.ml)}
+                  aria-label={`${c.name}: mais ${fmtNum(c.ml)} ml`}>
+                  <span>{c.name}</span><small>+{fmtNum(c.ml)} ml</small>
+                </button>
+                <button className="btn ghost half" disabled={!view.canAdd} onClick={() => add(half(c.ml))}
+                  aria-label={`${c.name}, metade: mais ${fmtNum(half(c.ml))} ml`}>½</button>
+              </div>
             ))}
           </div>
           {at === null ? (
@@ -127,7 +187,7 @@ export function WaterSheet({ profile, water, day, onClose, onSaved, onProfile }:
               <button className="btn ghost" onClick={() => chooseAt(null)}>Agora</button>
             </div>
           )}
-          <button className="link" onClick={() => setEditing(sizes.map(String))}>Ajustar copos</button>
+          <button className="link" onClick={startEditing}>Meus recipientes</button>
           <div className="row">
             <label className="field">
               <span>Outra quantidade (ml)</span>

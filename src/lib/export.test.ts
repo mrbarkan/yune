@@ -46,6 +46,31 @@ describe("export", () => {
     expect(t.rows[1].slice(2, 5)).toEqual(["Feijão", 80, 70]);
   });
 
+  it("aba Água lista a água e as bebidas das refeições, por data", () => {
+    const item = { quantity: "1 xícara", kcal: 4, protein_g: 0.2, carbs_g: 0.6, fat_g: 0.1 };
+    const t = exportTables({
+      ...empty,
+      water: [
+        { id: "w1", drank_at: "2026-10-19T18:00:00.000Z", ml: 250 },
+        { id: "w2", drank_at: "2026-10-19T10:00:00.000Z", ml: 300 },
+      ],
+      meals: [{
+        id: "m", eaten_at: "2026-10-19T11:00:00.000Z", description: "Café", kcal: 200, protein_g: 5, carbs_g: 30, fat_g: 5,
+        items: [
+          { ...item, name: "Café coado (sem açúcar)", grams: 200, ml: 200 },
+          { ...item, name: "Pão francês", grams: 50 },
+        ],
+        source: "manual", place: "casa", photo_path: null,
+      }],
+    }, tz).find((x) => x.name === "Água")!;
+    expect(t.columns).toEqual(["Data", "ml", "Tipo"]);
+    expect(t.rows).toEqual([
+      ["19/10/2026 07:00", 300, "Água"],
+      ["19/10/2026 08:00", 200, "Café coado (sem açúcar)"],
+      ["19/10/2026 15:00", 250, "Água"],
+    ]);
+  });
+
   it("resultado '<5' aparece como texto", () => {
     const t = exportTables({
       ...empty,
