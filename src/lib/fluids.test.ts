@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Recipe } from "./firebase";
 import { TACO } from "./foods";
-import { drinkMl, isAlcohol, isDrinkName, mealDrinkMl } from "./fluids";
+import { drinkMl, fluidLabel, isAlcohol, isDrinkName, mealDrinkMl } from "./fluids";
 import { recipeFood } from "./recipes";
 
 const named = (name: string) => ({ name, source: "taco" as const });
@@ -51,5 +51,13 @@ describe("bebidas", () => {
     expect(mealDrinkMl([it(200), it(), it(50)])).toBe(250);
     expect(mealDrinkMl(null)).toBe(0);
     expect(mealDrinkMl(undefined)).toBe(0);
+  });
+});
+
+describe("fluidLabel", () => {
+  it("total e água pura", () => {
+    expect(fluidLabel(1600, 1100)).toBe("1,6 L · 1,1 L de água");
+    expect(fluidLabel(1100, 1100)).toBe("1,1 L");
+    expect(fluidLabel(1649, 1600)).toBe("1,6 L");
   });
 });

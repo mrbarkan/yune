@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getDoc, getDocs, orderBy, query, setDoc, updateDoc, where } from "firebase/firestore";
 import { auth, DEFAULT_PROFILE, DEFAULT_REMINDERS, profileDoc, remindersDoc, rows, table, type Activity, type Meal, type Profile, type Sleep, type Water } from "./firebase";
+import { mealDrinkMl } from "./fluids";
 import { withGoalDefaults } from "./profileDefaults";
 import { isDenied, retryDenied } from "./retry";
 import { addDays, startOfDay } from "./time";
@@ -30,11 +31,18 @@ export async function loadRange(from: Date, to: Date): Promise<DayData> {
   };
 }
 
-/** Total de água do dia de `day` (ml) com uma única consulta. */
-export async function waterMlOn(day: Date): Promise<number> {
-  const from = startOfDay(day);
-  const snap = await getDocs(query(table("water"), where("drank_at", ">=", from.toISOString()), where("drank_at", "<", addDays(from, 1).toISOString()), orderBy("drank_at")));
-  return rows<Water>(snap).reduce((s, w) => s + w.ml, 0);
+/** Líquido do dia de `day` (ml): água registrada e bebidas das refeições. */
+export async function fluidsOn(day: Date): Promise<{ water: number; drinks: number }> {
+  const from = startOfDay(day).toISOString();
+  const to = addDays(startOfDay(day), 1).toISOString();
+  const [water, meals] = await Promise.all([
+    getDocs(query(table("water"), where("drank_at", ">=", from), where("drank_at", "<", to), orderBy("drank_at"))),
+    getDocs(query(table("meals"), where("eaten_at", ">=", from), where("eaten_at", "<", to), orderBy("eaten_at"))),
+  ]);
+  return {
+    water: rows<Water>(water).reduce((s, w) => s + w.ml, 0),
+    drinks: rows<Meal>(meals).reduce((s, m) => s + mealDrinkMl(m.items), 0),
+  };
 }
 
 export function splitByDay(data: DayData, day: Date): DayData {
@@ -57,10 +65,15 @@ export function totals(d: DayData) {
     (s, x) => s + (x.wake_at ? (new Date(x.wake_at).getTime() - new Date(x.bed_at).getTime()) / 60_000 : 0),
     0,
   );
+  // waterMl é só a água registrada; fluidMl soma as bebidas das refeições.
+  const waterMl = d.water.reduce((s, w) => s + w.ml, 0);
+  const drinksMl = d.meals.reduce((s, m) => s + mealDrinkMl(m.items), 0);
   return {
     kcalIn: d.meals.reduce((s, m) => s + m.kcal, 0),
     kcalOut: d.activities.reduce((s, a) => s + a.kcal, 0),
-    waterMl: d.water.reduce((s, w) => s + w.ml, 0),
+    waterMl,
+    drinksMl,
+    fluidMl: waterMl + drinksMl,
     activeMin: d.activities.reduce((s, a) => s + a.duration_min, 0),
     sleepMin,
     protein: d.meals.reduce((s, m) => s + (m.protein_g ?? 0), 0),

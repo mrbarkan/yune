@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { Sheet } from "@/components/Sheet";
 import { addDoc, updateDoc } from "firebase/firestore";
-import { waterMlOn } from "@/lib/data";
-import { waterView } from "@/lib/waterView";
+import { fluidsOn } from "@/lib/data";
+import { fluidLabel } from "@/lib/fluids";
+import { waterView, type Fluids } from "@/lib/waterView";
 import { DEFAULT_WATER_SIZES, profileDoc, row, table, type Profile, type Water } from "@/lib/firebase";
 import { backfillAt, fmtDayLong, fmtLiters, fmtNum, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
 
@@ -21,7 +22,7 @@ export function WaterSheet({ profile, water, day, onClose, onSaved, onProfile }:
   onProfile: () => void;
 }) {
   const sizes = profile.water_sizes?.length === 4 ? profile.water_sizes : DEFAULT_WATER_SIZES;
-  const [base, setBase] = useState<number | null>(null);
+  const [base, setBase] = useState<Fluids | null>(null);
   const [added, setAdded] = useState(0);
   const [failed, setFailed] = useState(false);
   const [custom, setCustom] = useState("");
@@ -32,13 +33,19 @@ export function WaterSheet({ profile, water, day, onClose, onSaved, onProfile }:
   const today = dateOf(toLocalInput(new Date()));
   const shown = at ? dateOf(at) : today;
   const view = waterView({ base, failed }, added);
-  const frac = Math.min((view.total ?? 0) / profile.water_goal_ml, 1);
+  // Duas camadas: água pura embaixo, bebidas das refeições por cima (as duas juntas até 100%).
+  const waterFrac = Math.min((view.water ?? 0) / profile.water_goal_ml, 1);
+  const drinksFrac = Math.min((view.drinks ?? 0) / profile.water_goal_ml, 1 - waterFrac);
+  const goal = fmtLiters(profile.water_goal_ml);
+  const label = view.total === null
+    ? `Total ${shown === today ? "de hoje" : "do dia"} indisponível`
+    : `${fmtLiters(view.total)} de ${goal} litros${view.drinks ? `: ${fmtLiters(view.water ?? 0)} de água e ${fmtLiters(view.drinks)} de bebidas das refeições` : ""}`;
 
   useEffect(() => {
     if (water) return;
     let alive = true;
-    waterMlOn(new Date(`${shown}T00:00`)).then(
-      (ml) => alive && setBase(ml),
+    fluidsOn(new Date(`${shown}T00:00`)).then(
+      (f) => alive && setBase(f),
       () => {
         if (!alive) return;
         setFailed(true);
@@ -87,9 +94,11 @@ export function WaterSheet({ profile, water, day, onClose, onSaved, onProfile }:
 
   return (
     <Sheet title="Água" accent="water" onClose={onClose}>
-      <div className="glass" aria-label={view.total === null ? `Total ${shown === today ? "de hoje" : "do dia"} indisponível` : `${fmtLiters(view.total)} de ${fmtLiters(profile.water_goal_ml)} litros`}>
-        <div className="glass-fill" style={{ height: `${frac * 100}%` }} />
-        <span className="big-num">{view.total === null ? "—" : fmtLiters(view.total)}<small>/ {fmtLiters(profile.water_goal_ml)} L</small></span>
+      <div className="glass" role="img" aria-label={label}>
+        <div className="glass-fill" style={{ height: `${waterFrac * 100}%` }} />
+        {drinksFrac > 0 && <div className="glass-fill drinks" style={{ bottom: `${waterFrac * 100}%`, height: `${drinksFrac * 100}%` }} />}
+        <span className="big-num">{view.total === null ? "—" : fmtLiters(view.total)}<small>/ {goal} L</small></span>
+        {view.total !== null && view.drinks ? <small className="glass-sub">{fluidLabel(view.total, view.water ?? 0)}</small> : null}
       </div>
       {shown !== today && <p className="note">Água de {fmtDayLong(new Date(`${shown}T00:00`))}</p>}
 

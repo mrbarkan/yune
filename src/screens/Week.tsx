@@ -49,7 +49,7 @@ export default function Week({ profile, version }: { profile: Profile; version: 
       <section className="averages">
         <Avg label="Média ingerida" value={fmtNum(avg((r) => r.t.kcalIn, logged))} unit="kcal" kind="food" />
         <Avg label="Média gasta" value={fmtNum(avg((r) => r.t.kcalOut))} unit="kcal" kind="move" />
-        <Avg label="Água por dia" value={fmtLiters(avg((r) => r.t.waterMl))} unit="L" kind="water" />
+        <Avg label="Água por dia" value={fmtLiters(avg((r) => r.t.fluidMl))} unit="L" kind="water" />
         <Avg label="Sono médio" value={slept.length ? fmtDuration(avg((r) => r.t.sleepMin, slept)) : "—"} unit="" kind="sleep" />
       </section>
     </main>

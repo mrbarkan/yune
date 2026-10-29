@@ -8,11 +8,15 @@ describe("waterView", () => {
     expect(v.total).toBeNull();
   });
   it("soma o carregado com o adicionado", () => {
-    const v = waterView({ base: 500, failed: false }, 250);
-    expect(v).toEqual({ canAdd: true, total: 750, onlyAdded: null });
+    const v = waterView({ base: { water: 500, drinks: 0 }, failed: false }, 250);
+    expect(v).toEqual({ canAdd: true, total: 750, water: 750, drinks: 0, onlyAdded: null });
+  });
+  it("bebidas das refeições entram no total, à parte da água", () => {
+    const v = waterView({ base: { water: 1100, drinks: 500 }, failed: false }, 250);
+    expect(v).toMatchObject({ total: 1850, water: 1350, drinks: 500 });
   });
   it("com falha não mostra total, mas permite adicionar e mostra só o adicionado", () => {
-    expect(waterView({ base: null, failed: true }, 0)).toEqual({ canAdd: true, total: null, onlyAdded: null });
-    expect(waterView({ base: null, failed: true }, 300)).toEqual({ canAdd: true, total: null, onlyAdded: 300 });
+    expect(waterView({ base: null, failed: true }, 0)).toEqual({ canAdd: true, total: null, water: null, drinks: null, onlyAdded: null });
+    expect(waterView({ base: null, failed: true }, 300)).toEqual({ canAdd: true, total: null, water: null, drinks: null, onlyAdded: 300 });
   });
 });

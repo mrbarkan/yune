@@ -1,6 +1,7 @@
 import type { FoodItem, RecipeUnit } from "./firebase";
 import type { Food } from "./foods";
 import { norm } from "./norm";
+import { fmtLiters } from "./time";
 
 const ALCOHOL = /\b(cervejas?|vinhos?|aguardente|cachaca|pinga|vodka|whiske?y|gin|rum|tequila|drinks?|caipirinhas?)\b/;
 
@@ -42,3 +43,10 @@ export function drinkMl(food: Pick<Food, "name" | "drink" | "source"> & { unit?:
 }
 
 export const mealDrinkMl = (items: FoodItem[] | null | undefined) => (items ?? []).reduce((s, it) => s + (it.ml ?? 0), 0);
+
+/** "1,6 L · 1,1 L de água"; só "1,6 L" quando os dois arredondam igual. */
+export function fluidLabel(totalMl: number, waterMl: number): string {
+  const total = fmtLiters(totalMl);
+  const water = fmtLiters(waterMl);
+  return total === water ? `${total} L` : `${total} L · ${water} L de água`;
+}
