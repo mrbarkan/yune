@@ -27,7 +27,7 @@ if (import.meta.env.VITE_USE_EMULATORS === "1") {
 
 /** Registros de cada pessoa ficam em users/{uid}/{coleção}. */
 export type Table = "meals" | "activities" | "water" | "sleep" | "custom_foods" | "push_subscriptions" | "diet_plans"
-  | "measurements" | "body_comp" | "lab_reports" | "body_photos" | "anamnesis";
+  | "measurements" | "body_comp" | "lab_reports" | "body_photos" | "anamnesis" | "recipes";
 
 const uid = () => {
   const u = auth.currentUser;
@@ -144,7 +144,23 @@ export type Pose = "frente" | "lado" | "costas";
 
 export type BodyPhoto = { id: string; taken_at: string; pose: Pose; path: string; created_at?: string };
 
-export type FoodItem = { name: string; quantity: string; grams: number; kcal: number; protein_g: number; carbs_g: number; fat_g: number };
+export type FoodItem = {
+  name: string; quantity: string; grams: number; kcal: number; protein_g: number; carbs_g: number; fat_g: number;
+  recipe_id?: string;
+};
+
+export type RecipeUnit = "ml" | "g" | "porcoes";
+
+/** Receita: itens somados + quanto rendeu (ml, g ou porções). */
+export type Recipe = {
+  id: string;
+  name: string;
+  items: FoodItem[];
+  yield_amount: number;
+  yield_unit: RecipeUnit;
+  created_at: string;
+  updated_at: string;
+};
 
 export type Place = "casa" | "restaurante" | "delivery";
 

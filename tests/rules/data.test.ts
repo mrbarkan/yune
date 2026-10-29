@@ -34,6 +34,11 @@ const food = (extra: object = {}) => ({
   name: "Pão", serving_label: "1 fatia", serving_g: 25, kcal: 60, protein_g: 2, carbs_g: 11, fat_g: 1, created_at: NOW, ...extra,
 });
 
+const recipe = (extra: object = {}) => ({
+  name: "Shake", items: [{ name: "Leite", quantity: "400 ml", grams: 400, kcal: 248, protein_g: 13, carbs_g: 19, fat_g: 13 }],
+  yield_amount: 500, yield_unit: "ml", created_at: NOW, updated_at: NOW, ...extra,
+});
+
 describe("regras: dados", () => {
   it("push: aceita FCM, recusa outros hosts e campos ruins", async () => {
     await assertSucceeds(setDoc(doc(alice(), `users/alice/push_subscriptions/${ID64}`), push()));
@@ -77,6 +82,19 @@ describe("regras: dados", () => {
     await assertFails(setDoc(doc(alice(), "users/alice/custom_foods/f2"), food({ created_at: { x: 1 } })));
   });
 
+  it("receitas: só a dona, rendimento e itens válidos, created_at fixo", async () => {
+    await assertSucceeds(setDoc(doc(alice(), "users/alice/recipes/r1"), recipe()));
+    await assertFails(getDoc(doc(bob(), "users/alice/recipes/r1")));
+    const bad = (extra: object) => assertFails(setDoc(doc(alice(), "users/alice/recipes/r2"), recipe(extra)));
+    await bad({ yield_unit: "copo" });
+    await bad({ yield_amount: 0 });
+    await bad({ items: [] });
+    await bad({ items: Array.from({ length: 61 }, () => recipe().items[0]) });
+    await bad({ owner: "bob" });
+    await assertSucceeds(updateDoc(doc(alice(), "users/alice/recipes/r1"), { name: "Shake de banana", updated_at: "2026-10-20T12:00:00.000Z" }));
+    await assertFails(updateDoc(doc(alice(), "users/alice/recipes/r1"), { created_at: "2026-10-20T12:00:00.000Z" }));
+  });
+
   it("anamnesis só aceita chaves de SECTIONS", async () => {
     for (const s of SECTIONS) {
       await assertSucceeds(setDoc(doc(alice(), "users/alice/anamnesis/2026-10-19"), { updated_at: NOW, answers: { [s.key]: {} } }));
@@ -109,6 +127,13 @@ describe("regras: dados", () => {
     await seed("users/alice/diet_plans/p1", { active: true, title: "t" });
     await assertSucceeds(updateDoc(doc(alice(), "users/alice/diet_plans/p1"), { active: false }));
     await assertFails(updateDoc(doc(alice(), "users/alice/diet_plans/p1"), { title: "x" }));
+  });
+
+  it("meals: item de receita (recipe_id) é aceito", async () => {
+    const item = { name: "Shake · 200 ml", quantity: "200 ml", grams: 200, kcal: 190, protein_g: 6, carbs_g: 30, fat_g: 5, recipe_id: "r1" };
+    await assertSucceeds(setDoc(doc(alice(), "users/alice/meals/m1"), {
+      eaten_at: NOW, description: "Shake", kcal: 190, items: [item], source: "manual", place: "casa", created_at: NOW,
+    }));
   });
 
   it("bob não lê nem cria em meals da alice", async () => {

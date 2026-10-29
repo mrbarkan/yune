@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AboutSheet } from "@/sheets/AboutSheet";
 import { AccountSection } from "@/components/AccountSection";
+import { RecipesSection } from "@/components/RecipesSection";
 import { suggestedGoal } from "@/lib/activity";
 import { disablePush, disablePushQuietly, enablePush, isIOS, pushState, type PushState } from "@/lib/push";
 import { signOut } from "firebase/auth";
@@ -106,6 +107,8 @@ export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }:
         <button className="btn primary" onClick={saveProfile}>Salvar</button>
         {msg && <p className="note">{msg}</p>}
       </section>
+
+      <RecipesSection profile={p} />
 
       <ProSection ent={ent} tz={p.timezone} onPro={onPro} />
 

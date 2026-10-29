@@ -7,10 +7,14 @@ import { dietWarnings, mealFor, optionKcal } from "@/lib/diet";
 import { addDoc, getDocs, limit, orderBy, query as q, updateDoc } from "firebase/firestore";
 import { PrivateImage } from "@/components/PrivateImage";
 import { deleteObject, ref, uploadBytes } from "firebase/storage";
-import { estimateFood, row, rows, storage, table, type CustomFood, type DietPlan, type FoodItem, type Meal, type Place, type Profile } from "@/lib/firebase";
+import { estimateFood, row, rows, storage, table, type CustomFood, type DietPlan, type FoodItem, type Meal, type Place, type Profile, type Recipe } from "@/lib/firebase";
+import { amountToGrams, fmtYield, recipeFood } from "@/lib/recipes";
+import { rescale, SCALE_LABEL, SCALES, type Scale } from "@/lib/plate";
+import { BatchCard, type BatchResult } from "./BatchCard";
 import { backfillAt, fmtNum, fmtTime, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
 
-type PlateItem = { id: string; food: Food; portion: Portion; qty: number; ai?: boolean };
+export type PlateItem = { id: string; food: Food; portion: Portion; qty: number; ai?: boolean };
+export type PlateLine = PlateItem & { n: ReturnType<typeof nutrition> };
 type Photo = { blob: Blob; base64: string; preview: string };
 type Label = { name: string; brand: string; serving_label: string; serving_g: number; kcal: number; protein_g: number; carbs_g: number; fat_g: number; notes: string };
 
@@ -42,43 +46,53 @@ const newId = () => `p${++seq}`;
 
 /** Itens de uma refeição salva → prato editável. Registros antigos sem itens viram um item só. */
 function plateFromMeal(m: Meal): PlateItem[] {
-  const items: FoodItem[] = m.items?.length ? m.items : [{
+  return plateFromItems(m.items?.length ? m.items : [{
     name: m.description, quantity: "porção", grams: 100, kcal: m.kcal, protein_g: m.protein_g ?? 0, carbs_g: m.carbs_g ?? 0, fat_g: m.fat_g ?? 0,
-  }];
-  return items.map((it) => ({ id: newId(), food: fromAiItem(it), portion: { label: it.quantity, g: it.grams || 100 }, qty: 1 }));
+  }]);
 }
+
+const plateFromItems = (items: FoodItem[]): PlateItem[] =>
+  items.map((it) => ({ id: newId(), food: fromAiItem(it), portion: { label: it.quantity, g: it.grams || 100 }, qty: 1 }));
 
 function fromAiItem(it: FoodItem): Food {
   const [f] = fromHistory([{ ...it, grams: it.grams || 100 }]);
-  return { ...f, key: `ai:${newId()}`, source: "recente" };
+  // Porção de receita (editar, Repetir) continua ligada à receita.
+  return { ...f, key: `ai:${newId()}`, source: "recente", ...(it.recipe_id ? { recipe_id: it.recipe_id } : {}) };
 }
 
-/** Nova refeição, ou a refeição `meal` já salva para corrigir. */
-export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, onProfile }: {
+/** Nova refeição, a refeição `meal` já salva para corrigir, ou os ingredientes da receita `recipe`. */
+export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, onClose, onSaved, onSavedRecipe, onProfile }: {
   profile: Profile;
   plan: DietPlan | null;
   dietOn: boolean;
   meal?: Meal;
+  /** Edita só os ingredientes; as refeições já registradas não mudam. */
+  recipe?: Recipe;
   /** Dia visto em Hoje: uma refeição nova num dia anterior começa nessa data. */
   day?: Date;
   onClose: () => void;
   onSaved: () => void;
+  onSavedRecipe?: () => void;
   /** Recarrega o perfil (depois de autorizar a IA). */
   onProfile?: () => void;
 }) {
   const [at, setAt] = useState(() => toLocalInput(meal ? new Date(meal.eaten_at) : backfillAt(day ?? new Date(), new Date())));
   const [place, setPlace] = useState<Place>(() => meal?.place ?? lastPlace());
   const [query, setQuery] = useState("");
-  const [plate, setPlate] = useState<PlateItem[]>(() => (meal ? plateFromMeal(meal) : []));
+  const [plate, setPlate] = useState<PlateItem[]>(() => (recipe ? plateFromItems(recipe.items) : meal ? plateFromMeal(meal) : []));
   const [open, setOpen] = useState<string | null>(null);
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [label, setLabel] = useState<Label | null>(null);
+  const [batch, setBatch] = useState(false);
+  // Tamanho do prato inteiro; volta a 1 quando entra ou sai item, para não escalar o novo.
+  const [scale, setScale] = useState<Scale>(1);
   const [busy, setBusy] = useState<"" | "ai" | "label" | "save">("");
   const [err, setErr] = useState("");
   const [notes, setNotes] = useState("");
   const [recentMeals, setRecentMeals] = useState<Meal[]>([]);
   const [allMeals, setAllMeals] = useState<Meal[]>([]);
   const [custom, setCustom] = useState<Food[]>([]);
+  const [recipes, setRecipes] = useState<Food[]>([]);
   const [history, setHistory] = useState<{ foods: Food[]; counts: Map<string, number> }>({ foods: [], counts: new Map() });
   const photoInput = useRef<HTMLInputElement>(null);
   const labelInput = useRef<HTMLInputElement>(null);
@@ -89,7 +103,8 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
       setAllMeals(meals);
       const seen = new Set<string>();
       setRecentMeals(meals.filter((m) => m.items?.length && !seen.has(norm(m.description)) && seen.add(norm(m.description))).slice(0, 5));
-      const items = meals.flatMap((m) => m.items ?? []);
+      // Porção de receita aparece pela receita, não como item do histórico.
+      const items = meals.flatMap((m) => m.items ?? []).filter((it) => !it.recipe_id);
       const counts = new Map<string, number>();
       for (const it of items) counts.set(norm(it.name), (counts.get(norm(it.name)) ?? 0) + 1);
       setHistory({ foods: fromHistory(items), counts });
@@ -97,9 +112,24 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
     getDocs(q(table("custom_foods"), orderBy("created_at", "desc"))).then((snap) =>
       setCustom(rows<CustomFood>(snap).map((c) => fromServing(`meu:${c.id}`, "meu", { ...c, brand: c.brand ?? "" }))),
     );
+    getDocs(q(table("recipes"), orderBy("updated_at", "desc"))).then((snap) =>
+      // Na edição de uma receita, ela mesma não entra como ingrediente.
+      setRecipes(rows<Recipe>(snap).filter((r) => r.id !== recipe?.id).flatMap((r) => {
+        try {
+          return [recipeFood(r)];
+        } catch {
+          return []; // rendimento inválido
+        }
+      })),
+    );
   }, []);
 
-  const pool = useMemo(() => [...custom, ...history.foods, ...SUPPLEMENTS, ...COMMON, ...TACO], [custom, history.foods]);
+  // Com menos de 2 itens não há o que separar: o cartão fecha.
+  useEffect(() => {
+    if (plate.length < 2) setBatch(false);
+  }, [plate.length]);
+
+  const pool = useMemo(() => [...custom, ...recipes, ...history.foods, ...SUPPLEMENTS, ...COMMON, ...TACO], [custom, recipes, history.foods]);
   const parsed = useMemo(() => parseQuery(query), [query]);
   const results = useMemo(() => searchFoods(parsed.text, pool), [parsed, pool]);
   const frequent = useMemo(
@@ -111,6 +141,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
   const add = (food: Food, opts: Partial<PlateItem> = {}) => {
     const id = newId();
     setPlate((p) => [...p, { id, food, portion: food.portions[0], qty: 1, ...opts }]);
+    setScale(1);
     setOpen(id);
     setQuery("");
     navigator.vibrate?.(6);
@@ -133,6 +164,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
     const items = (data.items ?? []) as FoodItem[];
     setNotes(items.length ? "" : data.notes);
     setPlate((p) => [...p, ...items.map((it) => ({ id: newId(), food: fromAiItem(it), portion: { label: it.quantity, g: it.grams || 100 }, qty: 1, ai: true }))]);
+    setScale(1);
     setOpen(null);
     setQuery("");
   }
@@ -191,10 +223,44 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
     add(food);
   }
 
-  const lines = plate.map((p) => ({ ...p, n: nutrition(p.food, p.portion.g * p.qty) }));
+  const lines: PlateLine[] = plate.map((p) => ({ ...p, n: nutrition(p.food, p.portion.g * p.qty) }));
   const total = lines.reduce((s, l) => s + l.n.kcal, 0);
 
+  // Salva o preparo como receita e troca os itens marcados pela porção comida.
+  async function saveBatch(r: BatchResult) {
+    setErr("");
+    const used = lines.filter((l) => r.picked.includes(l.id));
+    const now = new Date().toISOString();
+    const fields = { name: r.name, items: used.map(itemOf), yield_amount: r.yield_amount, yield_unit: r.yield_unit, created_at: now, updated_at: now };
+    let saved: Recipe;
+    try {
+      const doc = await addDoc(table("recipes"), fields);
+      saved = { ...fields, id: doc.id };
+    } catch {
+      return setErr("Não foi possível salvar a receita.");
+    }
+    const food = recipeFood(saved);
+    const portion = { label: fmtYield(r.eaten, r.yield_unit), g: amountToGrams(saved, r.eaten) };
+    const ai = used.some((l) => l.ai) || undefined;
+    setPlate((p) => [...p.filter((x) => !r.picked.includes(x.id)), { id: newId(), food, portion, qty: 1, ai }]);
+    setRecipes((list) => [food, ...list]);
+    setScale(1);
+    setOpen(null);
+    setBatch(false);
+  }
+
+  async function saveRecipe(r: Recipe) {
+    setBusy("save");
+    setErr("");
+    const error = await updateDoc(row("recipes", r.id), { items: lines.map(itemOf), updated_at: new Date().toISOString() })
+      .then(() => null, () => "Não foi possível salvar a receita.");
+    setBusy("");
+    if (error) return setErr(error);
+    (onSavedRecipe ?? onSaved)();
+  }
+
   async function save() {
+    if (recipe) return saveRecipe(recipe);
     setBusy("save");
     setErr("");
     let photo_path: string | null = meal?.photo_path ?? null;
@@ -203,12 +269,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
       const ok = await uploadBytes(ref(storage, path), photo.blob, { contentType: "image/jpeg" }).then(() => true, () => false);
       if (ok) photo_path = path;
     }
-    const items: FoodItem[] = lines.map((l) => ({
-      name: l.food.name,
-      quantity: qtyLabel(l.qty, l.portion),
-      grams: Math.round(l.portion.g * l.qty),
-      ...l.n,
-    }));
+    const items = lines.map(itemOf);
     const sum = (k: "protein_g" | "carbs_g" | "fat_g") => Math.round(items.reduce((s, i) => s + i[k], 0) * 10) / 10;
     const fields = {
       eaten_at: fromLocalInput(at),
@@ -237,8 +298,8 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
   }
 
   const when = new Date(at);
-  const dietMeal = plan && dietOn ? mealFor(plan, when, mealName(when)) : null;
-  const warnings = plan && dietOn && plate.length
+  const dietMeal = plan && dietOn && !recipe ? mealFor(plan, when, mealName(when)) : null;
+  const warnings = plan && dietOn && !recipe && plate.length
     ? dietWarnings(
         plan,
         allMeals.filter((m) => m.id !== meal?.id && sameDay(new Date(m.eaten_at), when)).flatMap((m) => m.items ?? []),
@@ -247,17 +308,31 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
     : [];
 
   const update = (id: string, patch: Partial<PlateItem>) => setPlate((p) => p.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  const remove = (id: string) => {
+    setPlate((p) => p.filter((x) => x.id !== id));
+    setScale(1);
+  };
+  const resize = (to: Scale) => {
+    setPlate((p) => {
+      const qtys = rescale(p.map((x) => x.qty), scale, to);
+      return p.map((x, i) => ({ ...x, qty: qtys[i] }));
+    });
+    setScale(to);
+  };
+  const step = (qty: number, d: number) => Math.round((qty + d) * 100) / 100;
   const addResult = (f: Food) => add(f, { portion: pickPortion(f, parsed), qty: parsed.qty });
 
   return (
-    <Sheet title={mealName(when)} accent="food" onClose={onClose}>
-      <div className="food-meta">
-        <label className="time-pill">
-          <span>{fmtTime(when)}</span>
-          <input type="datetime-local" value={at} onChange={(e) => e.target.value && setAt(e.target.value)} aria-label="Horário" />
-        </label>
-        <Segmented value={place} onChange={setPlace} options={PLACES} />
-      </div>
+    <Sheet title={recipe ? recipe.name : mealName(when)} accent="food" onClose={onClose}>
+      {!recipe && (
+        <div className="food-meta">
+          <label className="time-pill">
+            <span>{fmtTime(when)}</span>
+            <input type="datetime-local" value={at} onChange={(e) => e.target.value && setAt(e.target.value)} aria-label="Horário" />
+          </label>
+          <Segmented value={place} onChange={setPlace} options={PLACES} />
+        </div>
+      )}
 
       <div className="search">
         <input className="search-input" value={query} maxLength={600} placeholder="Buscar ou descrever…"
@@ -267,9 +342,11 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
             if (results.length) addResult(results[0]);
             else if (query.trim().length > 2) consent.ask(() => estimate(query.trim()));
           }} />
-        <button className="cam" onClick={() => photoInput.current?.click()} aria-label="Foto do prato" disabled={!!busy}>
-          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" /><circle cx="12" cy="13.5" r="3.6" /></svg>
-        </button>
+        {!recipe && (
+          <button className="cam" onClick={() => photoInput.current?.click()} aria-label="Foto do prato" disabled={!!busy}>
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" /><circle cx="12" cy="13.5" r="3.6" /></svg>
+          </button>
+        )}
         <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { onPhoto(e.target.files?.[0]); e.target.value = ""; }} />
         <input ref={labelInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; consent.ask(() => onLabel(f)); e.target.value = ""; }} />
       </div>
@@ -289,7 +366,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
             return (
               <li key={f.key}>
                 <button onClick={() => addResult(f)}>
-                  <span><b>{f.name}</b><small>{f.brand ? `${f.brand} · ` : ""}{qtyLabel(parsed.qty, { ...portion, label: portionLabel(portion) })}{f.source === "meu" ? " · meu item" : ""}</small></span>
+                  <span><b>{f.name}</b><small>{f.brand ? `${f.brand} · ` : ""}{qtyLabel(parsed.qty, { ...portion, label: portionLabel(portion) })}{f.source === "meu" ? " · meu item" : f.source === "receita" ? " · receita" : ""}</small></span>
                   <em>{fmtNum(nutrition(f, portion.g * parsed.qty).kcal)}</em>
                 </button>
               </li>
@@ -302,11 +379,13 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
               </button>
             </li>
           )}
-          <li className="ai-row">
-            <button onClick={() => labelInput.current?.click()} disabled={!!busy}>
-              <span><b>Fotografar o rótulo</b><small>suplementos e industrializados — fica salvo para a próxima</small></span><em>▦</em>
-            </button>
-          </li>
+          {!recipe && (
+            <li className="ai-row">
+              <button onClick={() => labelInput.current?.click()} disabled={!!busy}>
+                <span><b>Fotografar o rótulo</b><small>suplementos e industrializados — fica salvo para a próxima</small></span><em>▦</em>
+              </button>
+            </li>
+          )}
         </ul>
       ) : plate.length === 0 && !label ? (
         <div className="shortcuts">
@@ -328,7 +407,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
               </div>
             </div>
           )}
-          {recentMeals.length > 0 && (
+          {recentMeals.length > 0 && !recipe && (
             <div>
               <p className="eyebrow">Repetir</p>
               <div className="chips">
@@ -343,20 +422,22 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
               </div>
             </div>
           )}
-          {(frequent.length > 0 || custom.length > 0) && (
+          {(frequent.length > 0 || custom.length > 0 || recipes.length > 0) && (
             <div>
               <p className="eyebrow">Frequentes</p>
               <div className="chips">
-                {[...custom.slice(0, 4), ...frequent].map((f) => (
+                {[...recipes.slice(0, 3), ...custom.slice(0, 4), ...frequent].map((f) => (
                   <button key={f.key} className="chip" onClick={() => add(f)}>{f.name}</button>
                 ))}
               </div>
             </div>
           )}
-          <div className="shortcut-actions">
-            <button className="btn ghost" onClick={() => photoInput.current?.click()}>Foto do prato</button>
-            <button className="btn ghost" onClick={() => labelInput.current?.click()}>Ler rótulo</button>
-          </div>
+          {!recipe && (
+            <div className="shortcut-actions">
+              <button className="btn ghost" onClick={() => photoInput.current?.click()}>Foto do prato</button>
+              <button className="btn ghost" onClick={() => labelInput.current?.click()}>Ler rótulo</button>
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -388,6 +469,13 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
       {(plate.length > 0 || photo) && (
         <div className="plate">
           {photo ? <img className="plate-photo" src={photo.preview} alt="Foto do prato" /> : meal?.photo_path ? <PrivateImage path={meal.photo_path} className="plate-photo" alt="Foto do prato" /> : null}
+          {plate.length > 1 && (
+            <div className="chips plate-scale" role="group" aria-label="Tamanho do prato">
+              {SCALES.map((s) => (
+                <button key={s} className={s === scale ? "chip on" : "chip"} aria-pressed={s === scale} onClick={() => resize(s)}>{SCALE_LABEL[s]}</button>
+              ))}
+            </div>
+          )}
           <ul>
             {lines.map((l) => (
               <li key={l.id}>
@@ -396,10 +484,10 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
                   <small>{portionLabel(l.portion)}</small>
                 </button>
                 <div className="stepper">
-                  <button onClick={() => (l.qty <= 0.5 ? setPlate((p) => p.filter((x) => x.id !== l.id)) : update(l.id, { qty: l.qty - 0.5 }))}
+                  <button onClick={() => (l.qty <= 0.5 ? remove(l.id) : update(l.id, { qty: step(l.qty, -0.5) }))}
                     aria-label="Menos">{l.qty <= 0.5 ? "×" : "−"}</button>
                   <span>{String(l.qty).replace(".", ",")}</span>
-                  <button onClick={() => update(l.id, { qty: l.qty + 0.5 })} aria-label="Mais">+</button>
+                  <button onClick={() => update(l.id, { qty: step(l.qty, 0.5) })} aria-label="Mais">+</button>
                 </div>
                 <span className="num">{fmtNum(l.n.kcal)}</span>
                 {open === l.id && (
@@ -411,6 +499,11 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
               </li>
             ))}
           </ul>
+          {batch ? (
+            <BatchCard items={lines} onCancel={() => setBatch(false)} onSave={saveBatch} />
+          ) : plate.length >= 2 && !recipe && (
+            <button className="link" onClick={() => setBatch(true)}>Fiz mais do que comi</button>
+          )}
           {plate.length > 0 && <Facts lines={lines} estimated={plate.some((p) => p.ai)} />}
           {notes && <p className="note">{notes}</p>}
         </div>
@@ -422,13 +515,24 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
       {plate.length > 0 && (
         <div className="actions sticky">
           <button className="btn primary" disabled={!!busy} onClick={save}>
-            {busy === "save" ? "Salvando…" : `${meal ? "Salvar alterações" : "Salvar"} · ${fmtNum(total)} kcal`}
+            {busy === "save" ? "Salvando…" : `${recipe ? "Salvar receita" : meal ? "Salvar alterações" : "Salvar"} · ${fmtNum(total)} kcal`}
           </button>
         </div>
       )}
       {consent.sheet}
     </Sheet>
   );
+}
+
+/** Linha do prato → item salvo na refeição (e nos ingredientes de uma receita). */
+function itemOf(l: PlateLine): FoodItem {
+  return {
+    name: l.food.name,
+    quantity: qtyLabel(l.qty, l.portion),
+    grams: Math.round(l.portion.g * l.qty),
+    ...l.n,
+    ...(l.food.recipe_id ? { recipe_id: l.food.recipe_id } : {}),
+  };
 }
 
 const portionLabel = (p: Portion) => (/\d/.test(p.label) ? p.label : `${p.label} · ${fmtNum(p.g)} g`);

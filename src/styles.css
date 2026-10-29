@@ -70,7 +70,8 @@ input, textarea, select { font: inherit; color: inherit; }
 .screen {
   max-width: 560px; margin: 0 auto;
   padding: calc(var(--safe-t) + 28px) 20px calc(var(--safe-b) + 120px);
-  animation: rise 0.5s var(--ease) both;
+  /* backwards: ao terminar não guarda o transform, que faria da tela o bloco das folhas fixas. */
+  animation: rise 0.5s var(--ease) backwards;
 }
 .loading { opacity: 0.55; transition: opacity 0.3s; }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
@@ -268,6 +269,25 @@ input, textarea, select { font: inherit; color: inherit; }
 .shortcut-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .label-card { display: grid; gap: 14px; padding: 16px; border-radius: 18px; background: var(--paper-2); }
 .label-card .eyebrow { margin: 0; }
+.batch-card .segmented { background: var(--paper); }
+.batch-card .segmented button.on { background: var(--paper-2); box-shadow: none; }
+.batch-items { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.batch-items label { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; min-height: 44px; border-bottom: 1px solid var(--line); }
+.batch-items input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.batch-items span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.batch-items small { font: 500 12px var(--mono); color: var(--ink-3); }
+.batch-yield { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; }
+.recipes { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.recipes > li { border-bottom: 1px solid var(--line); }
+.recipe-main { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; padding: 12px 0; }
+.recipe-main span { display: grid; gap: 2px; min-width: 0; }
+.recipe-main b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recipe-main small { font-size: 12px; color: var(--ink-3); }
+.recipe-main em { font: 500 12px var(--mono); font-style: normal; color: var(--ink-2); flex: none; }
+.recipe-edit { display: grid; gap: 14px; padding: 0 0 16px; animation: rise 0.3s var(--ease) both; }
+.plate > .link { justify-self: start; }
+.plate-scale { gap: 6px; }
+.plate-scale .chip { min-width: 44px; min-height: 34px; padding: 0 12px; font: 500 14px var(--mono); }
 .plate { display: grid; gap: 12px; }
 .plate-photo { width: 100%; max-height: 200px; object-fit: cover; border-radius: 18px; }
 .plate ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }

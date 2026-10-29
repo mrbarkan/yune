@@ -13,7 +13,7 @@ export type FullData = {
 
 /** Toda coleção, menos as inscrições de push (são do aparelho). Fotos do corpo só entram se a pessoa escolher. */
 export const FULL_COLLECTIONS: Table[] = [
-  "meals", "activities", "water", "sleep", "custom_foods", "diet_plans", "measurements", "body_comp", "lab_reports", "body_photos", "anamnesis",
+  "meals", "activities", "water", "sleep", "custom_foods", "diet_plans", "measurements", "body_comp", "lab_reports", "body_photos", "anamnesis", "recipes",
 ];
 
 const str = (v: unknown) => (typeof v === "string" ? v : null);
@@ -60,7 +60,7 @@ export function manifest(d: FullData, files: string[], missing: string[], now: D
 export const LEIA_ME = `Yune - seus dados
 
 Este arquivo .zip tem tudo o que você registrou no Yune.
-- dados.json: todos os registros (perfil, refeições, água, sono, movimento, medidas, exames, questionário, dieta e lembretes).
+- dados.json: todos os registros (perfil, refeições, receitas, água, sono, movimento, medidas, exames, questionário, dieta e lembretes).
 - arquivos/: as fotos e os documentos originais que você enviou, do jeito que foram enviados.
 - Fotos do corpo só vêm se você escolheu incluí-las ao baixar.
 - Se algum arquivo não pôde ser baixado, ele aparece em arquivos_faltando dentro de dados.json.

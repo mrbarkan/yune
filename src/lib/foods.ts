@@ -11,13 +11,14 @@ export type Food = {
   preferred?: boolean;
   name: string;
   brand?: string;
-  source: "taco" | "comum" | "suplemento" | "meu" | "recente";
+  source: "taco" | "comum" | "suplemento" | "meu" | "recente" | "receita";
   kcal: number;
   protein: number;
   carbs: number;
   fat: number;
   portions: Portion[];
   search: string;
+  recipe_id?: string;
 };
 
 export const norm = (s: string) =>
@@ -63,7 +64,7 @@ const ALIASES: [RegExp, string][] = [
   [/\bpao trigo frances\b/, "pao de sal cacetinho"],
 ];
 
-const searchText = (s: string) => {
+export const searchText = (s: string) => {
   const n = norm(s);
   return [n, ...ALIASES.filter(([re]) => re.test(n)).map(([, a]) => a)].join(" ");
 };
@@ -201,7 +202,7 @@ export function fromHistory(items: FoodItem[]): Food[] {
   return [...seen.values()];
 }
 
-const SOURCE_WEIGHT: Record<Food["source"], number> = { meu: 0, recente: 1, suplemento: 2, comum: 3, taco: 3 };
+const SOURCE_WEIGHT: Record<Food["source"], number> = { receita: 0, meu: 0, recente: 1, suplemento: 2, comum: 3, taco: 3 };
 
 // Palavras de ligação não precisam casar ("suco de laranja" acha "Laranja, baía, suco").
 const STOP = new Set(["de", "da", "do", "das", "dos", "com", "e", "a", "o", "em", "na", "no"]);
