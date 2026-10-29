@@ -7,10 +7,12 @@ import { dietWarnings, mealFor, optionKcal } from "@/lib/diet";
 import { addDoc, getDocs, limit, orderBy, query as q, updateDoc } from "firebase/firestore";
 import { PrivateImage } from "@/components/PrivateImage";
 import { deleteObject, ref, uploadBytes } from "firebase/storage";
-import { estimateFood, row, rows, storage, table, type CustomFood, type DietPlan, type FoodItem, type Meal, type Place, type Profile } from "@/lib/firebase";
+import { estimateFood, row, rows, storage, table, type CustomFood, type DietPlan, type FoodItem, type Meal, type Place, type Profile, type Recipe } from "@/lib/firebase";
+import { recipeFood } from "@/lib/recipes";
 import { backfillAt, fmtNum, fmtTime, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
 
-type PlateItem = { id: string; food: Food; portion: Portion; qty: number; ai?: boolean };
+export type PlateItem = { id: string; food: Food; portion: Portion; qty: number; ai?: boolean };
+export type PlateLine = PlateItem & { n: ReturnType<typeof nutrition> };
 type Photo = { blob: Blob; base64: string; preview: string };
 type Label = { name: string; brand: string; serving_label: string; serving_g: number; kcal: number; protein_g: number; carbs_g: number; fat_g: number; notes: string };
 
@@ -50,7 +52,8 @@ function plateFromMeal(m: Meal): PlateItem[] {
 
 function fromAiItem(it: FoodItem): Food {
   const [f] = fromHistory([{ ...it, grams: it.grams || 100 }]);
-  return { ...f, key: `ai:${newId()}`, source: "recente" };
+  // Porção de receita (editar, Repetir) continua ligada à receita.
+  return { ...f, key: `ai:${newId()}`, source: "recente", ...(it.recipe_id ? { recipe_id: it.recipe_id } : {}) };
 }
 
 /** Nova refeição, ou a refeição `meal` já salva para corrigir. */
@@ -79,6 +82,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
   const [recentMeals, setRecentMeals] = useState<Meal[]>([]);
   const [allMeals, setAllMeals] = useState<Meal[]>([]);
   const [custom, setCustom] = useState<Food[]>([]);
+  const [recipes, setRecipes] = useState<Food[]>([]);
   const [history, setHistory] = useState<{ foods: Food[]; counts: Map<string, number> }>({ foods: [], counts: new Map() });
   const photoInput = useRef<HTMLInputElement>(null);
   const labelInput = useRef<HTMLInputElement>(null);
@@ -89,7 +93,8 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
       setAllMeals(meals);
       const seen = new Set<string>();
       setRecentMeals(meals.filter((m) => m.items?.length && !seen.has(norm(m.description)) && seen.add(norm(m.description))).slice(0, 5));
-      const items = meals.flatMap((m) => m.items ?? []);
+      // Porção de receita aparece pela receita, não como item do histórico.
+      const items = meals.flatMap((m) => m.items ?? []).filter((it) => !it.recipe_id);
       const counts = new Map<string, number>();
       for (const it of items) counts.set(norm(it.name), (counts.get(norm(it.name)) ?? 0) + 1);
       setHistory({ foods: fromHistory(items), counts });
@@ -97,9 +102,18 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
     getDocs(q(table("custom_foods"), orderBy("created_at", "desc"))).then((snap) =>
       setCustom(rows<CustomFood>(snap).map((c) => fromServing(`meu:${c.id}`, "meu", { ...c, brand: c.brand ?? "" }))),
     );
+    getDocs(q(table("recipes"), orderBy("updated_at", "desc"))).then((snap) =>
+      setRecipes(rows<Recipe>(snap).flatMap((r) => {
+        try {
+          return [recipeFood(r)];
+        } catch {
+          return []; // rendimento inválido
+        }
+      })),
+    );
   }, []);
 
-  const pool = useMemo(() => [...custom, ...history.foods, ...SUPPLEMENTS, ...COMMON, ...TACO], [custom, history.foods]);
+  const pool = useMemo(() => [...custom, ...recipes, ...history.foods, ...SUPPLEMENTS, ...COMMON, ...TACO], [custom, recipes, history.foods]);
   const parsed = useMemo(() => parseQuery(query), [query]);
   const results = useMemo(() => searchFoods(parsed.text, pool), [parsed, pool]);
   const frequent = useMemo(
@@ -191,7 +205,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
     add(food);
   }
 
-  const lines = plate.map((p) => ({ ...p, n: nutrition(p.food, p.portion.g * p.qty) }));
+  const lines: PlateLine[] = plate.map((p) => ({ ...p, n: nutrition(p.food, p.portion.g * p.qty) }));
   const total = lines.reduce((s, l) => s + l.n.kcal, 0);
 
   async function save() {
@@ -203,12 +217,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
       const ok = await uploadBytes(ref(storage, path), photo.blob, { contentType: "image/jpeg" }).then(() => true, () => false);
       if (ok) photo_path = path;
     }
-    const items: FoodItem[] = lines.map((l) => ({
-      name: l.food.name,
-      quantity: qtyLabel(l.qty, l.portion),
-      grams: Math.round(l.portion.g * l.qty),
-      ...l.n,
-    }));
+    const items = lines.map(itemOf);
     const sum = (k: "protein_g" | "carbs_g" | "fat_g") => Math.round(items.reduce((s, i) => s + i[k], 0) * 10) / 10;
     const fields = {
       eaten_at: fromLocalInput(at),
@@ -289,7 +298,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
             return (
               <li key={f.key}>
                 <button onClick={() => addResult(f)}>
-                  <span><b>{f.name}</b><small>{f.brand ? `${f.brand} · ` : ""}{qtyLabel(parsed.qty, { ...portion, label: portionLabel(portion) })}{f.source === "meu" ? " · meu item" : ""}</small></span>
+                  <span><b>{f.name}</b><small>{f.brand ? `${f.brand} · ` : ""}{qtyLabel(parsed.qty, { ...portion, label: portionLabel(portion) })}{f.source === "meu" ? " · meu item" : f.source === "receita" ? " · receita" : ""}</small></span>
                   <em>{fmtNum(nutrition(f, portion.g * parsed.qty).kcal)}</em>
                 </button>
               </li>
@@ -343,11 +352,11 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
               </div>
             </div>
           )}
-          {(frequent.length > 0 || custom.length > 0) && (
+          {(frequent.length > 0 || custom.length > 0 || recipes.length > 0) && (
             <div>
               <p className="eyebrow">Frequentes</p>
               <div className="chips">
-                {[...custom.slice(0, 4), ...frequent].map((f) => (
+                {[...recipes.slice(0, 3), ...custom.slice(0, 4), ...frequent].map((f) => (
                   <button key={f.key} className="chip" onClick={() => add(f)}>{f.name}</button>
                 ))}
               </div>
@@ -429,6 +438,17 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
       {consent.sheet}
     </Sheet>
   );
+}
+
+/** Linha do prato → item salvo na refeição (e nos ingredientes de uma receita). */
+function itemOf(l: PlateLine): FoodItem {
+  return {
+    name: l.food.name,
+    quantity: qtyLabel(l.qty, l.portion),
+    grams: Math.round(l.portion.g * l.qty),
+    ...l.n,
+    ...(l.food.recipe_id ? { recipe_id: l.food.recipe_id } : {}),
+  };
 }
 
 const portionLabel = (p: Portion) => (/\d/.test(p.label) ? p.label : `${p.label} · ${fmtNum(p.g)} g`);
