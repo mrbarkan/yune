@@ -5,8 +5,8 @@ import { fmtLiters } from "./time";
 
 const ALCOHOL = /\b(cervejas?|vinhos?|aguardente|cachaca|pinga|vodka|whiske?y|gin|rum|tequila|drinks?|caipirinhas?)\b/;
 
-// Sólidos que citam café/chá/leite ("Bolo de café", "Sorvete de café").
-const SOLID = /\b(bolos?|sorvetes?|pudins?|pudim|biscoitos?|bolachas?|balas?|(?<!erva )doces?)\b/;
+// Sólidos que citam café/chá/leite ("Bolo de café", "Doce de leite"); só no começo, para "Café doce" contar.
+const SOLID = /^(bolos?|sorvetes?|pudins?|pudim|biscoitos?|bolachas?|balas?|doces?)\b/;
 
 /** Bebida pelo nome: [palavra que conta, exceções]. */
 const DRINKS: [RegExp, RegExp?][] = [
@@ -41,9 +41,10 @@ export function isDrinkName(name: string): boolean {
 /** Quanto do item conta como líquido (ml = g), ou null se não é bebida. */
 export function drinkMl(food: Pick<Food, "name" | "drink" | "source"> & { unit?: RecipeUnit }, grams: number): number | null {
   if (isAlcohol(food.name)) return null;
+  if (food.drink) return Math.round(grams);
   // Suplemento é pó para misturar: só conta o que já vem pronto para beber.
   if (food.source === "suplemento") return /\b(shakes?|bebida)\b/.test(norm(food.name)) ? Math.round(grams) : null;
-  const drink = food.drink || (food.source === "receita" && food.unit === "ml") || isDrinkName(food.name);
+  const drink = (food.source === "receita" && food.unit === "ml") || isDrinkName(food.name);
   return drink ? Math.round(grams) : null;
 }
 

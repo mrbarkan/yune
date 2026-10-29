@@ -35,6 +35,19 @@ describe("bebidas", () => {
     expect(isDrinkName("Chá de erva-doce")).toBe(true);
   });
 
+  it("sólido só exclui quando abre o nome", () => {
+    expect(drinkMl(named("Café doce"), 200)).toBe(200);
+    expect(drinkMl(named("Chá doce"), 200)).toBe(200);
+    expect(drinkMl(named("Mate doce"), 300)).toBe(300);
+    for (const n of ["Bolo de café", "Sorvete de café", "Doce de leite"]) expect(drinkMl(named(n), 200), n).toBeNull();
+    expect(drinkMl(named("Chá de erva-doce"), 200)).toBe(200);
+  });
+
+  it("item marcado como bebida vence a regra do suplemento, mas não o álcool", () => {
+    expect(drinkMl({ name: "Body Coffee Protein (café com TCM)", source: "suplemento", drink: true }, 250)).toBe(250);
+    expect(drinkMl({ name: "Cerveja de whey", source: "suplemento", drink: true }, 250)).toBeNull();
+  });
+
   it("álcool nunca conta, mesmo marcado como bebida", () => {
     expect(isAlcohol("Cerveja, pilsen 2")).toBe(true);
     expect(isAlcohol("Gin tônica")).toBe(true);
