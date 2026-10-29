@@ -67,6 +67,20 @@ describe("regras: dados", () => {
     await assertSucceeds(setDoc(doc(alice(), "reminders/alice"), semChave));
   });
 
+  it("reminders: gap_enabled é do app; last_gap_at, gap_count_date e gap_count do servidor", async () => {
+    await assertSucceeds(setDoc(doc(alice(), "reminders/alice"), { ...DEFAULT_REMINDERS, gap_enabled: false }));
+    await assertFails(setDoc(doc(alice(), "reminders/alice"), { ...DEFAULT_REMINDERS, gap_enabled: "não" }));
+    const semChave = Object.fromEntries(Object.entries(DEFAULT_REMINDERS).filter(([k]) => k !== "gap_enabled"));
+    await assertSucceeds(setDoc(doc(alice(), "reminders/alice"), semChave));
+    await assertFails(setDoc(doc(alice(), "reminders/alice"), { ...DEFAULT_REMINDERS, gap_count: 0 }));
+
+    await seed("reminders/alice", { ...DEFAULT_REMINDERS, last_gap_at: NOW, gap_count_date: "2026-10-19", gap_count: 1 });
+    await assertSucceeds(updateDoc(doc(alice(), "reminders/alice"), { gap_enabled: false }));
+    await assertFails(updateDoc(doc(alice(), "reminders/alice"), { gap_count: 0 }));
+    await assertFails(updateDoc(doc(alice(), "reminders/alice"), { gap_count_date: "2026-10-18" }));
+    await assertFails(updateDoc(doc(alice(), "reminders/alice"), { last_gap_at: "2026-10-19T00:00:00.000Z" }));
+  });
+
   it("reminders: campos last_* são do servidor", async () => {
     await assertSucceeds(setDoc(doc(alice(), "reminders/alice"), DEFAULT_REMINDERS));
     await assertFails(setDoc(doc(alice(), "reminders/alice"), { ...DEFAULT_REMINDERS, last_water_at: NOW }));

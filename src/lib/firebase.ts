@@ -221,6 +221,8 @@ export type Reminders = {
   bedtime_enabled: boolean;
   bedtime_time: string;
   push_details: boolean;
+  /** Pergunta sobre lanches depois de 4 h sem refeição. */
+  gap_enabled: boolean;
 };
 
 export type StripeState = { status: string; until: string; cancel_at_period_end: boolean; trial_end: string | null };
