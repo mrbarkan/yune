@@ -8,7 +8,7 @@ import { addDoc, getDocs, limit, orderBy, query as q, updateDoc } from "firebase
 import { PrivateImage } from "@/components/PrivateImage";
 import { deleteObject, ref, uploadBytes } from "firebase/storage";
 import { estimateFood, row, rows, storage, table, type CustomFood, type DietPlan, type FoodItem, type Meal, type Place, type Profile, type Recipe } from "@/lib/firebase";
-import { amountToGrams, fmtAmount, recipeFood, UNIT_LABEL } from "@/lib/recipes";
+import { amountToGrams, fmtYield, recipeFood } from "@/lib/recipes";
 import { rescale, SCALE_LABEL, SCALES, type Scale } from "@/lib/plate";
 import { BatchCard, type BatchResult } from "./BatchCard";
 import { backfillAt, fmtNum, fmtTime, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
@@ -46,11 +46,13 @@ const newId = () => `p${++seq}`;
 
 /** Itens de uma refeição salva → prato editável. Registros antigos sem itens viram um item só. */
 function plateFromMeal(m: Meal): PlateItem[] {
-  const items: FoodItem[] = m.items?.length ? m.items : [{
+  return plateFromItems(m.items?.length ? m.items : [{
     name: m.description, quantity: "porção", grams: 100, kcal: m.kcal, protein_g: m.protein_g ?? 0, carbs_g: m.carbs_g ?? 0, fat_g: m.fat_g ?? 0,
-  }];
-  return items.map((it) => ({ id: newId(), food: fromAiItem(it), portion: { label: it.quantity, g: it.grams || 100 }, qty: 1 }));
+  }]);
 }
+
+const plateFromItems = (items: FoodItem[]): PlateItem[] =>
+  items.map((it) => ({ id: newId(), food: fromAiItem(it), portion: { label: it.quantity, g: it.grams || 100 }, qty: 1 }));
 
 function fromAiItem(it: FoodItem): Food {
   const [f] = fromHistory([{ ...it, grams: it.grams || 100 }]);
@@ -58,23 +60,26 @@ function fromAiItem(it: FoodItem): Food {
   return { ...f, key: `ai:${newId()}`, source: "recente", ...(it.recipe_id ? { recipe_id: it.recipe_id } : {}) };
 }
 
-/** Nova refeição, ou a refeição `meal` já salva para corrigir. */
-export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, onProfile }: {
+/** Nova refeição, a refeição `meal` já salva para corrigir, ou os ingredientes da receita `recipe`. */
+export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, onClose, onSaved, onSavedRecipe, onProfile }: {
   profile: Profile;
   plan: DietPlan | null;
   dietOn: boolean;
   meal?: Meal;
+  /** Edita só os ingredientes; as refeições já registradas não mudam. */
+  recipe?: Recipe;
   /** Dia visto em Hoje: uma refeição nova num dia anterior começa nessa data. */
   day?: Date;
   onClose: () => void;
   onSaved: () => void;
+  onSavedRecipe?: () => void;
   /** Recarrega o perfil (depois de autorizar a IA). */
   onProfile?: () => void;
 }) {
   const [at, setAt] = useState(() => toLocalInput(meal ? new Date(meal.eaten_at) : backfillAt(day ?? new Date(), new Date())));
   const [place, setPlace] = useState<Place>(() => meal?.place ?? lastPlace());
   const [query, setQuery] = useState("");
-  const [plate, setPlate] = useState<PlateItem[]>(() => (meal ? plateFromMeal(meal) : []));
+  const [plate, setPlate] = useState<PlateItem[]>(() => (recipe ? plateFromItems(recipe.items) : meal ? plateFromMeal(meal) : []));
   const [open, setOpen] = useState<string | null>(null);
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [label, setLabel] = useState<Label | null>(null);
@@ -108,7 +113,8 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
       setCustom(rows<CustomFood>(snap).map((c) => fromServing(`meu:${c.id}`, "meu", { ...c, brand: c.brand ?? "" }))),
     );
     getDocs(q(table("recipes"), orderBy("updated_at", "desc"))).then((snap) =>
-      setRecipes(rows<Recipe>(snap).flatMap((r) => {
+      // Na edição de uma receita, ela mesma não entra como ingrediente.
+      setRecipes(rows<Recipe>(snap).filter((r) => r.id !== recipe?.id).flatMap((r) => {
         try {
           return [recipeFood(r)];
         } catch {
@@ -117,6 +123,11 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
       })),
     );
   }, []);
+
+  // Com menos de 2 itens não há o que separar: o cartão fecha.
+  useEffect(() => {
+    if (plate.length < 2) setBatch(false);
+  }, [plate.length]);
 
   const pool = useMemo(() => [...custom, ...recipes, ...history.foods, ...SUPPLEMENTS, ...COMMON, ...TACO], [custom, recipes, history.foods]);
   const parsed = useMemo(() => parseQuery(query), [query]);
@@ -229,7 +240,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
       return setErr("Não foi possível salvar a receita.");
     }
     const food = recipeFood(saved);
-    const portion = { label: `${fmtAmount(r.eaten)} ${UNIT_LABEL[r.yield_unit]}`, g: amountToGrams(saved, r.eaten) };
+    const portion = { label: fmtYield(r.eaten, r.yield_unit), g: amountToGrams(saved, r.eaten) };
     const ai = used.some((l) => l.ai) || undefined;
     setPlate((p) => [...p.filter((x) => !r.picked.includes(x.id)), { id: newId(), food, portion, qty: 1, ai }]);
     setRecipes((list) => [food, ...list]);
@@ -238,7 +249,18 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
     setBatch(false);
   }
 
+  async function saveRecipe(r: Recipe) {
+    setBusy("save");
+    setErr("");
+    const error = await updateDoc(row("recipes", r.id), { items: lines.map(itemOf), updated_at: new Date().toISOString() })
+      .then(() => null, () => "Não foi possível salvar a receita.");
+    setBusy("");
+    if (error) return setErr(error);
+    (onSavedRecipe ?? onSaved)();
+  }
+
   async function save() {
+    if (recipe) return saveRecipe(recipe);
     setBusy("save");
     setErr("");
     let photo_path: string | null = meal?.photo_path ?? null;
@@ -276,8 +298,8 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
   }
 
   const when = new Date(at);
-  const dietMeal = plan && dietOn ? mealFor(plan, when, mealName(when)) : null;
-  const warnings = plan && dietOn && plate.length
+  const dietMeal = plan && dietOn && !recipe ? mealFor(plan, when, mealName(when)) : null;
+  const warnings = plan && dietOn && !recipe && plate.length
     ? dietWarnings(
         plan,
         allMeals.filter((m) => m.id !== meal?.id && sameDay(new Date(m.eaten_at), when)).flatMap((m) => m.items ?? []),
@@ -289,7 +311,6 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
   const remove = (id: string) => {
     setPlate((p) => p.filter((x) => x.id !== id));
     setScale(1);
-    if (plate.length <= 1) setBatch(false);
   };
   const resize = (to: Scale) => {
     setPlate((p) => {
@@ -302,14 +323,16 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
   const addResult = (f: Food) => add(f, { portion: pickPortion(f, parsed), qty: parsed.qty });
 
   return (
-    <Sheet title={mealName(when)} accent="food" onClose={onClose}>
-      <div className="food-meta">
-        <label className="time-pill">
-          <span>{fmtTime(when)}</span>
-          <input type="datetime-local" value={at} onChange={(e) => e.target.value && setAt(e.target.value)} aria-label="Horário" />
-        </label>
-        <Segmented value={place} onChange={setPlace} options={PLACES} />
-      </div>
+    <Sheet title={recipe ? recipe.name : mealName(when)} accent="food" onClose={onClose}>
+      {!recipe && (
+        <div className="food-meta">
+          <label className="time-pill">
+            <span>{fmtTime(when)}</span>
+            <input type="datetime-local" value={at} onChange={(e) => e.target.value && setAt(e.target.value)} aria-label="Horário" />
+          </label>
+          <Segmented value={place} onChange={setPlace} options={PLACES} />
+        </div>
+      )}
 
       <div className="search">
         <input className="search-input" value={query} maxLength={600} placeholder="Buscar ou descrever…"
@@ -319,9 +342,11 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
             if (results.length) addResult(results[0]);
             else if (query.trim().length > 2) consent.ask(() => estimate(query.trim()));
           }} />
-        <button className="cam" onClick={() => photoInput.current?.click()} aria-label="Foto do prato" disabled={!!busy}>
-          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" /><circle cx="12" cy="13.5" r="3.6" /></svg>
-        </button>
+        {!recipe && (
+          <button className="cam" onClick={() => photoInput.current?.click()} aria-label="Foto do prato" disabled={!!busy}>
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden><path d="M4 8h3l2-2.5h6L17 8h3v11H4z" /><circle cx="12" cy="13.5" r="3.6" /></svg>
+          </button>
+        )}
         <input ref={photoInput} type="file" accept="image/*" hidden onChange={(e) => { onPhoto(e.target.files?.[0]); e.target.value = ""; }} />
         <input ref={labelInput} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; consent.ask(() => onLabel(f)); e.target.value = ""; }} />
       </div>
@@ -354,11 +379,13 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
               </button>
             </li>
           )}
-          <li className="ai-row">
-            <button onClick={() => labelInput.current?.click()} disabled={!!busy}>
-              <span><b>Fotografar o rótulo</b><small>suplementos e industrializados — fica salvo para a próxima</small></span><em>▦</em>
-            </button>
-          </li>
+          {!recipe && (
+            <li className="ai-row">
+              <button onClick={() => labelInput.current?.click()} disabled={!!busy}>
+                <span><b>Fotografar o rótulo</b><small>suplementos e industrializados — fica salvo para a próxima</small></span><em>▦</em>
+              </button>
+            </li>
+          )}
         </ul>
       ) : plate.length === 0 && !label ? (
         <div className="shortcuts">
@@ -405,10 +432,12 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
               </div>
             </div>
           )}
-          <div className="shortcut-actions">
-            <button className="btn ghost" onClick={() => photoInput.current?.click()}>Foto do prato</button>
-            <button className="btn ghost" onClick={() => labelInput.current?.click()}>Ler rótulo</button>
-          </div>
+          {!recipe && (
+            <div className="shortcut-actions">
+              <button className="btn ghost" onClick={() => photoInput.current?.click()}>Foto do prato</button>
+              <button className="btn ghost" onClick={() => labelInput.current?.click()}>Ler rótulo</button>
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -472,7 +501,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
           </ul>
           {batch ? (
             <BatchCard items={lines} onCancel={() => setBatch(false)} onSave={saveBatch} />
-          ) : plate.length >= 2 && (
+          ) : plate.length >= 2 && !recipe && (
             <button className="link" onClick={() => setBatch(true)}>Fiz mais do que comi</button>
           )}
           {plate.length > 0 && <Facts lines={lines} estimated={plate.some((p) => p.ai)} />}
@@ -486,7 +515,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
       {plate.length > 0 && (
         <div className="actions sticky">
           <button className="btn primary" disabled={!!busy} onClick={save}>
-            {busy === "save" ? "Salvando…" : `${meal ? "Salvar alterações" : "Salvar"} · ${fmtNum(total)} kcal`}
+            {busy === "save" ? "Salvando…" : `${recipe ? "Salvar receita" : meal ? "Salvar alterações" : "Salvar"} · ${fmtNum(total)} kcal`}
           </button>
         </div>
       )}

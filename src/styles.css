@@ -276,6 +276,14 @@ input, textarea, select { font: inherit; color: inherit; }
 .batch-items span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .batch-items small { font: 500 12px var(--mono); color: var(--ink-3); }
 .batch-yield { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; }
+.recipes { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.recipes > li { border-bottom: 1px solid var(--line); }
+.recipe-main { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; padding: 12px 0; }
+.recipe-main span { display: grid; gap: 2px; min-width: 0; }
+.recipe-main b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recipe-main small { font-size: 12px; color: var(--ink-3); }
+.recipe-main em { font: 500 12px var(--mono); font-style: normal; color: var(--ink-2); flex: none; }
+.recipe-edit { display: grid; gap: 14px; padding: 0 0 16px; animation: rise 0.3s var(--ease) both; }
 .plate > .link { justify-self: start; }
 .plate-scale { gap: 6px; }
 .plate-scale .chip { min-width: 44px; min-height: 34px; padding: 0 12px; font: 500 14px var(--mono); }
