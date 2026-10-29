@@ -363,6 +363,15 @@ input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; bo
 .snack-time { justify-self: start; }
 .toast { position: sticky; bottom: 8px; justify-self: center; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 6px 0 18px; border-radius: 99px; background: var(--ink); color: var(--paper); font-size: 14px; animation: rise 0.3s var(--ease) both; }
 .toast button { min-height: 36px; padding: 0 12px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+/* Fechar o dia: o registro do dia e as perguntas em aberto, na ordem do horário. */
+.review { list-style: none; margin: 0; padding: 0; }
+.review li { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.review time { font: 500 12px var(--mono); color: var(--ink-3); }
+.review-meal span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-meal span::first-letter { text-transform: uppercase; }
+.review-meal em { font: 500 12px var(--mono); font-style: normal; color: var(--ink-3); }
+.review-ask > div { grid-column: 2 / -1; display: grid; gap: 10px; }
+.review-ask p { margin: 0; }
 
 /* ---------- navegação ---------- */
 .tabbar {

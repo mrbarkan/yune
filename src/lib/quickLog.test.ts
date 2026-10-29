@@ -19,7 +19,7 @@ vi.mock("./firebase", () => ({
   row: (n: string, id: string) => `${n}/${id}`,
   rows: (snap: { docs: unknown[] }) => snap.docs,
 }));
-import { closeInReview, copyMeal, loadHistory, loadRecipes, loadReview, logChip, mealFields } from "./quickLog";
+import { closeInReview, copyMeal, loadHistory, loadRecipes, loadReview, logChip, mealFields, openInReview } from "./quickLog";
 
 const item = (name: string, kcal: number, protein_g: number, extra: Partial<FoodItem> = {}): FoodItem => ({
   name, quantity: "1 porção", grams: 100, kcal, protein_g, carbs_g: 1.04, fat_g: 0.5, ...extra,
@@ -101,7 +101,15 @@ describe("logChip", () => {
   });
 });
 
-describe("histórico", () => {
+describe("revisão do dia: desfazer e histórico", () => {
+  it("openInReview tira a chave", async () => {
+    await openInReview("2026-10-27", "slot:Almoço");
+    const [ref, data, opts] = calls[0].args as [string, { closed: unknown }, object];
+    expect(ref).toBe("day_reviews/2026-10-27");
+    expect(data.closed).toEqual({ remove: ["slot:Almoço"] });
+    expect(opts).toEqual({ merge: true });
+  });
+
   it("loadHistory: 8 semanas, mais recentes primeiro, até 400", async () => {
     const now = new Date("2026-10-28T12:00:00.000Z");
     await loadHistory(now);

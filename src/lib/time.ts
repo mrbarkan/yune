@@ -31,6 +31,9 @@ export const toLocalInput = (d: Date) => {
 };
 export const fromLocalInput = (v: string) => new Date(v).toISOString();
 
+/** AAAA-MM-DD do dia local (id de `day_reviews`). */
+export const dayId = (d: Date) => toLocalInput(d).slice(0, 10);
+
 /** Horário sugerido para um registro novo: `at` se `day` é hoje; num dia anterior, a mesma hora do dia na data vista. */
 export const backfillAt = (day: Date, at: Date, now = new Date()) =>
   sameDay(day, now) ? at : new Date(day.getFullYear(), day.getMonth(), day.getDate(), at.getHours(), at.getMinutes());

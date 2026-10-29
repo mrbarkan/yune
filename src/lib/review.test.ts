@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { FoodItem, Meal, Recipe } from "./firebase";
-import { snackOptions } from "./review";
+import { reviewRows, snackOptions } from "./review";
 
 // npm test roda com TZ=America/Sao_Paulo: horários abaixo são locais.
+const DAY = new Date(2026, 9, 27);
 const at = (h: number, m = 0, day = 27) => new Date(2026, 9, day, h, m).toISOString();
+const WIN = { start: "09:00", end: "21:00" };
+const NIGHT = new Date(2026, 9, 27, 22);
 
 const item = (name: string, kcal = 100, extra: Partial<FoodItem> = {}): FoodItem => ({
   name, quantity: "1 porção", grams: 100, kcal, protein_g: 1, carbs_g: 1, fat_g: 1, ...extra,
@@ -46,5 +49,37 @@ describe("snackOptions", () => {
   it("não repete o mesmo nome", () => {
     const history = [meal("Banana", at(16, 0, 20)), meal("Banana", at(12, 0, 21))];
     expect(snackOptions(history, [recipe("r1", "banana")]).map((c) => c.label)).toEqual(["Banana"]);
+  });
+});
+
+describe("reviewRows", () => {
+  it("dia vazio: as três refeições principais", () => {
+    expect(reviewRows([], DAY, NIGHT, WIN, []).map((r) => r.key)).toEqual(["slot:Café da manhã", "slot:Almoço", "slot:Jantar"]);
+  });
+
+  it("refeições e intervalos em ordem de horário; o intervalo vem logo depois da refeição em que começa", () => {
+    const meals = [meal("Pão", at(8, 40)), meal("Almoço", at(12, 30)), meal("Jantar", at(20, 10))];
+    const rows = reviewRows(meals, DAY, NIGHT, WIN, []);
+    expect(rows.map((r) => [r.kind, r.at])).toEqual([
+      ["meal", at(8, 40)], ["meal", at(12, 30)], ["gap", at(12, 30)], ["meal", at(20, 10)],
+    ]);
+    const gap = rows[2];
+    expect(gap.kind === "gap" && gap.gap).toEqual({ key: at(12, 30), from: at(12, 30), to: at(20, 10) });
+  });
+
+  it("o que já foi respondido some", () => {
+    const meals = [meal("Almoço", at(12, 30)), meal("Jantar", at(20, 10))];
+    const rows = reviewRows(meals, DAY, NIGHT, WIN, ["slot:Café da manhã", at(12, 30)]);
+    expect(rows.map((r) => r.kind)).toEqual(["meal", "meal"]);
+  });
+
+  it("refeições de outro dia não entram", () => {
+    const rows = reviewRows([meal("Ontem", at(12, 0, 26)), meal("Almoço", at(12)), meal("Jantar", at(19))], DAY, NIGHT, WIN, ["slot:Café da manhã"]);
+    expect(rows.map((r) => r.kind)).toEqual(["meal", "gap", "meal"]);
+  });
+
+  it("hoje à tarde: o jantar ainda não é perguntado", () => {
+    const rows = reviewRows([meal("Café", at(8, 30)), meal("Almoço", at(12))], DAY, new Date(2026, 9, 27, 15, 30), WIN, []);
+    expect(rows.map((r) => r.kind)).toEqual(["meal", "meal"]);
   });
 });

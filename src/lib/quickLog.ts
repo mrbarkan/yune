@@ -1,4 +1,4 @@
-import { addDoc, arrayUnion, getDoc, getDocs, limit, orderBy, query, setDoc, where } from "firebase/firestore";
+import { addDoc, arrayRemove, arrayUnion, getDoc, getDocs, limit, orderBy, query, setDoc, where } from "firebase/firestore";
 import { row, rows, table, type FoodItem, type Meal, type Place, type Recipe } from "./firebase";
 import type { QuickChip } from "./review";
 import { mealName } from "./slots";
@@ -53,3 +53,7 @@ export async function loadReview(day: string): Promise<string[]> {
   return snap.exists() ? ((snap.data().closed as string[] | undefined) ?? []) : [];
 }
 
+/** Desfazer: a chave volta a ficar em aberto. */
+export async function openInReview(day: string, key: string): Promise<void> {
+  await setDoc(row("day_reviews", day), { updated_at: new Date().toISOString(), closed: arrayRemove(key) }, { merge: true });
+}

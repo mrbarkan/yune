@@ -1,7 +1,8 @@
 import type { FoodItem, Meal, Recipe } from "./firebase";
-import { snackChips } from "./gaps";
+import { findGaps, missingSlots, snackChips, type Gap, type MissingSlot } from "./gaps";
 import { norm } from "./norm";
 import { recipeItem } from "./recipes";
+import { sameDay } from "./time";
 
 /** Atalho de um toque: a refeição inteira a repetir, ou um item só (receita, item frequente). */
 export type QuickChip = { key: string; label: string; kcal: number } & ({ meal: Meal } | { item: FoodItem });
@@ -51,4 +52,26 @@ export function snackOptions(history: Meal[], recipes: Recipe[], limit = 6): Qui
     push({ key: `item:${norm(item.name)}`, label: item.name, kcal: item.kcal, item });
   }
   return out;
+}
+
+export type ReviewRow =
+  | { kind: "meal"; key: string; at: string; meal: Meal }
+  | { kind: "slot"; key: string; at: string; slot: MissingSlot }
+  | { kind: "gap"; key: string; at: string; gap: Gap };
+
+/**
+ * Linhas de Fechar o dia, em ordem de horário: refeições do dia, refeições principais faltando e intervalos ainda em aberto.
+ * Os intervalos saem das refeições atuais: registrar dentro de um já o divide.
+ */
+export function reviewRows(meals: Meal[], day: Date, now: Date, window: { start: string; end: string }, closed: string[]): ReviewRow[] {
+  const ofDay = meals.filter((m) => sameDay(new Date(m.eaten_at), day));
+  const times = ofDay.map((m) => m.eaten_at);
+  const shut = new Set(closed);
+  const list: ReviewRow[] = [
+    ...ofDay.map((m): ReviewRow => ({ kind: "meal", key: m.id, at: m.eaten_at, meal: m })),
+    ...missingSlots(times, day, now).filter((s) => !shut.has(s.key)).map((s): ReviewRow => ({ kind: "slot", key: s.key, at: s.at, slot: s })),
+    ...findGaps(times, day, now, window).filter((g) => !shut.has(g.key)).map((g): ReviewRow => ({ kind: "gap", key: g.key, at: g.from, gap: g })),
+  ];
+  // Mesmo horário: a refeição antes do intervalo que começa nela.
+  return list.sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || Number(a.kind !== "meal") - Number(b.kind !== "meal"));
 }
