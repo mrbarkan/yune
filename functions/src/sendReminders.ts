@@ -14,7 +14,7 @@ const VAPID_PUBLIC_KEY = defineSecret("VAPID_PUBLIC_KEY");
 const VAPID_PRIVATE_KEY = defineSecret("VAPID_PRIVATE_KEY");
 const VAPID_SUBJECT = defineSecret("VAPID_SUBJECT");
 
-/** Totais do dia `day` (AAAA-MM-DD) no fuso da pessoa. Sono conta no dia em que se acorda; água inclui as bebidas das refeições. */
+/** Totais do dia `day` (AAAA-MM-DD) no fuso da pessoa. Sono conta no dia em que se acorda; água pura e bebidas das refeições à parte. */
 async function dailyTotals(db: Firestore, uid: string, tz: string, day: string) {
   const since = new Date(Date.now() - 48 * 3_600_000).toISOString();
   const user = db.collection("users").doc(uid);
@@ -28,7 +28,8 @@ async function dailyTotals(db: Firestore, uid: string, tz: string, day: string) 
   return {
     kcal_in: sum(meals, "eaten_at", (d) => d.kcal),
     kcal_out: sum(activities, "started_at", (d) => d.kcal),
-    water_ml: sum(water, "drank_at", (d) => d.ml) + sum(meals, "eaten_at", (d) => mealDrinkMl(d.items)),
+    water_ml: sum(water, "drank_at", (d) => d.ml),
+    drinks_ml: sum(meals, "eaten_at", (d) => mealDrinkMl(d.items)),
     sleep_min: Math.round(sum(sleep, "wake_at", (d) => (Date.parse(d.wake_at) - Date.parse(d.bed_at)) / 60_000)),
   };
 }

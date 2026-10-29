@@ -83,8 +83,9 @@ export default function Today({ profile, day, onDay, version, onChange, plan, di
           frac={t.kcalIn / profile.kcal_goal} />
         <Instrument kind="move" label="Movimento" value={fmtNum(t.kcalOut)} unit="kcal" sub={t.activeMin ? fmtDuration(t.activeMin) : "—"}
           frac={t.activeMin / 30} />
+        {/* Com bebidas, a água pura no lugar da meta (as duas não cabem numa linha a 360 px; a barra segue a meta). */}
         <Instrument kind="water" label="Água" value={fmtLiters(t.fluidMl)} unit="L"
-          sub={t.drinksMl > 0 ? `${fmtLiters(t.waterMl)} L de água · meta ${fmtLiters(profile.water_goal_ml)} L` : `de ${fmtLiters(profile.water_goal_ml)} L`}
+          sub={t.drinksMl > 0 ? `${fmtLiters(t.waterMl)} L de água` : `de ${fmtLiters(profile.water_goal_ml)} L`}
           frac={t.fluidMl / profile.water_goal_ml} />
         <Instrument kind="sleep" label="Sono" value={t.sleepMin ? fmtDuration(t.sleepMin) : "—"} unit="" sub={`meta ${fmtDuration(profile.sleep_goal_min)}`}
           frac={t.sleepMin / profile.sleep_goal_min} />

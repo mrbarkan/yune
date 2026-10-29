@@ -3,7 +3,10 @@ import type { Food } from "./foods";
 import { norm } from "./norm";
 import { fmtLiters } from "./time";
 
-const ALCOHOL = /\b(cervejas?|vinhos?|aguardente|cachaca|pinga|vodka|whiske?y|gin|rum|tequila|drinks?|caipirinhas?)\b/;
+const ALCOHOL = new RegExp(
+  "\\b(cervejas?|chopes?|chopps?|vinhos?|espumantes?|champanhes?|champagnes?|sidras?|saques?|aguardente|cachaca|pinga|vodka|vodcas?|" +
+    "whiske?y|uisques?|conhaques?|licor|licores|gin|rum|tequila|drinks?|caipirinhas?|caipiroskas?|caipiroscas?)\\b",
+);
 
 // Sólidos que citam café/chá/leite ("Bolo de café", "Doce de leite"); só no começo, para "Café doce" contar.
 const SOLID = /^(bolos?|sorvetes?|pudins?|pudim|biscoitos?|bolachas?|balas?|doces?)\b/;
@@ -18,7 +21,8 @@ const DRINKS: [RegExp, RegExp?][] = [
   [/\bagua de coco\b/],
   [/\bbebida\b/],
   [/\bshakes?\b/],
-  [/\bvitamina\b/, /\bvitamina [a-e]\b|mistura para vitamina/],
+  // "Vitamina C", "Vitamina D3", "Vitamina B12" são suplemento; "Vitamina de banana" conta.
+  [/\bvitamina\b/, /\bvitamina [a-ek]\d*\b|mistura para vitamina/],
   [/\bisotonic/],
   [/\bkombucha\b/],
   [/\bcapp?uccino\b/],

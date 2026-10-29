@@ -48,6 +48,18 @@ describe("bebidas", () => {
     expect(drinkMl({ name: "Cerveja de whey", source: "suplemento", drink: true }, 250)).toBeNull();
   });
 
+  it("grafias brasileiras de álcool não contam", () => {
+    for (const n of ["Licor de café", "Chá com conhaque", "Chope", "Chopp claro", "Uísque", "Vodca", "Espumante", "Champanhe", "Sidra", "Saquê", "Caipiroska"]) {
+      expect(isAlcohol(n), n).toBe(true);
+      expect(drinkMl({ name: n, source: "taco", drink: true }, 200), n).toBeNull();
+    }
+  });
+
+  it("vitamina com número (D3, B12) é suplemento, não bebida", () => {
+    for (const n of ["Vitamina D3", "Vitamina B12", "Vitamina C"]) expect(drinkMl(named(n), 10), n).toBeNull();
+    expect(drinkMl(named("Vitamina de banana"), 300)).toBe(300);
+  });
+
   it("álcool nunca conta, mesmo marcado como bebida", () => {
     expect(isAlcohol("Cerveja, pilsen 2")).toBe(true);
     expect(isAlcohol("Gin tônica")).toBe(true);

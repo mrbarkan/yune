@@ -15,6 +15,9 @@ export default function Week({ profile, version }: { profile: Profile; version: 
   const logged = rows.filter((r) => r.t.kcalIn > 0);
   const avg = (f: (r: (typeof rows)[number]) => number, list = rows) => (list.length ? list.reduce((s, r) => s + f(r), 0) / list.length : 0);
   const slept = rows.filter((r) => r.t.sleepMin > 0);
+  // Bebidas contam na água; a água pura aparece à parte quando difere do total (como o rótulo do copo).
+  const fluidAvg = avg((r) => r.t.fluidMl);
+  const waterAvg = avg((r) => r.t.waterMl);
   const max = Math.max(profile.kcal_goal * 1.3, ...rows.map((r) => r.t.kcalIn));
 
   return (
@@ -49,18 +52,20 @@ export default function Week({ profile, version }: { profile: Profile; version: 
       <section className="averages">
         <Avg label="Média ingerida" value={fmtNum(avg((r) => r.t.kcalIn, logged))} unit="kcal" kind="food" />
         <Avg label="Média gasta" value={fmtNum(avg((r) => r.t.kcalOut))} unit="kcal" kind="move" />
-        <Avg label="Água por dia" value={fmtLiters(avg((r) => r.t.fluidMl))} unit="L" kind="water" />
+        <Avg label="Água por dia" value={fmtLiters(fluidAvg)} unit="L" kind="water"
+          sub={fmtLiters(waterAvg) !== fmtLiters(fluidAvg) ? `${fmtLiters(waterAvg)} L de água` : undefined} />
         <Avg label="Sono médio" value={slept.length ? fmtDuration(avg((r) => r.t.sleepMin, slept)) : "—"} unit="" kind="sleep" />
       </section>
     </main>
   );
 }
 
-function Avg({ label, value, unit, kind }: { label: string; value: string; unit: string; kind: string }) {
+function Avg({ label, value, unit, kind, sub }: { label: string; value: string; unit: string; kind: string; sub?: string }) {
   return (
     <div className={`avg ${kind}`}>
       <span className="i-label">{label}</span>
       <span className="i-value">{value}<small>{unit}</small></span>
+      {sub && <span className="i-sub">{sub}</span>}
     </div>
   );
 }
