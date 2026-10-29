@@ -19,7 +19,7 @@ service cloud.firestore {
 
     function validProfile(uid) {
       return d().keys().hasOnly(['name', 'sex', 'birth_year', 'height_cm', 'weight_kg', 'kcal_goal', 'water_goal_ml', 'sleep_goal_min', 'timezone',
-          'water_sizes', 'photo_path', 'ai_consent'])
+          'water_sizes', 'water_containers', 'photo_path', 'ai_consent'])
         && (d().get('name', null) == null || text(d().name, 0, 80))
         && d().get('sex', null) in [null, 'f', 'm']
         && optNum(d().get('birth_year', null), 1900, 2100)
@@ -30,6 +30,7 @@ service cloud.firestore {
         && num(d().sleep_goal_min, 180, 720)
         && text(d().timezone, 1, 64)
         && (d().get('water_sizes', null) == null || validWaterSizes(d().water_sizes))
+        && (d().get('water_containers', null) == null || validWaterContainers(d().water_containers))
         && (d().get('photo_path', null) == null || d().photo_path.matches('^profile-photos/' + uid + '/[^/]+$'))
         && (d().get('ai_consent', null) == null || (d().ai_consent.keys().hasOnly(['at', 'version']) && iso(d().ai_consent.at)
           && d().ai_consent.version is int && num(d().ai_consent.version, 1, 100)));
@@ -40,6 +41,17 @@ service cloud.firestore {
       return v is list && v.size() == 4
         && v[0] is int && num(v[0], 10, 3000) && v[1] is int && num(v[1], 10, 3000)
         && v[2] is int && num(v[2], 10, 3000) && v[3] is int && num(v[3], 10, 3000);
+    }
+
+    // Meus recipientes: de 1 a 6 { name, ml } (validContainers em src/lib/waterView.ts).
+    function validContainer(v, i) {
+      return v.size() <= i || (v[i] is map && v[i].keys().hasOnly(['name', 'ml']) && text(v[i].name, 1, 40)
+        && v[i].ml is int && num(v[i].ml, 10, 3000));
+    }
+    function validWaterContainers(v) {
+      return v is list && v.size() >= 1 && v.size() <= 6
+        && validContainer(v, 0) && validContainer(v, 1) && validContainer(v, 2)
+        && validContainer(v, 3) && validContainer(v, 4) && validContainer(v, 5);
     }
 
     function validReminders() {

@@ -63,9 +63,9 @@ export async function importDietPlan(body: { path: string; name: string } | { te
   }
 }
 
-export const DEFAULT_WATER_SIZES = [150, 250, 350, 500];
+export { DEFAULT_PROFILE, DEFAULT_REMINDERS, DEFAULT_WATER_SIZES } from "./defaults";
 
-export { DEFAULT_PROFILE, DEFAULT_REMINDERS } from "./defaults";
+export type WaterContainer = { name: string; ml: number };
 
 export type Profile = {
   id: string;
@@ -78,8 +78,10 @@ export type Profile = {
   water_goal_ml: number;
   sleep_goal_min: number;
   timezone: string;
-  /** Tamanhos dos botões de água (ml); ausente = DEFAULT_WATER_SIZES. */
+  /** Tamanhos dos botões de água (ml); ausente = DEFAULT_WATER_SIZES. Antigo: valem os water_containers quando existem. */
   water_sizes?: number[];
+  /** Meus recipientes (1 a 6), na ordem dos botões da folha Água. */
+  water_containers?: WaterContainer[];
   /** Caminho da foto de perfil no Storage. */
   photo_path?: string | null;
   /** Autorização para enviar dados à IA (Anthropic); ausente/null = não autorizou. */

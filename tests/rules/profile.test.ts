@@ -36,6 +36,25 @@ describe("regras: perfil", () => {
   });
 });
 
+describe("regras: water_containers no perfil", () => {
+  const c = (name: string, ml: number) => ({ name, ml });
+  it("aceita de 1 a 6 recipientes válidos", async () => {
+    await assertSucceeds(setDoc(doc(alice(), "users/alice"), profile({ water_containers: [c("Garrafa", 750)] })));
+    await assertSucceeds(setDoc(doc(alice(), "users/alice"), profile({ water_containers: Array.from({ length: 6 }, (_, i) => c(`Copo ${i}`, 100 + i)) })));
+  });
+  it("nega 7 entradas, lista vazia, ml fora da faixa ou quebrado, nome vazio e chave extra", async () => {
+    await assertFails(setDoc(doc(alice(), "users/alice"), profile({ water_containers: Array(7).fill(c("Copo", 200)) })));
+    await assertFails(setDoc(doc(alice(), "users/alice"), profile({ water_containers: [] })));
+    await assertFails(setDoc(doc(alice(), "users/alice"), profile({ water_containers: [c("Copo", 5)] })));
+    await assertFails(setDoc(doc(alice(), "users/alice"), profile({ water_containers: [c("Copo", 250.5)] })));
+    await assertFails(setDoc(doc(alice(), "users/alice"), profile({ water_containers: [c("", 250)] })));
+    await assertFails(setDoc(doc(alice(), "users/alice"), profile({ water_containers: [c("x".repeat(41), 250)] })));
+    await assertFails(setDoc(doc(alice(), "users/alice"), profile({ water_containers: [{ name: "Copo", ml: 250, color: "azul" }] })));
+    await assertFails(setDoc(doc(alice(), "users/alice"), profile({ water_containers: [c("Copo", 250), "x"] })));
+    await assertFails(setDoc(doc(alice(), "users/alice"), profile({ water_containers: [{ name: "Copo" }] })));
+  });
+});
+
 describe("regras: ai_consent no perfil", () => {
   const ok = { at: NOW, version: 1 };
   it("aceita consentimento válido, null e ausente", async () => {

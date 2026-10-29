@@ -338,6 +338,19 @@ input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; bo
 .water-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .water-buttons .btn { padding: 0; }
 .water-buttons .btn.on { border-color: var(--accent); color: var(--accent); }
+/* Meus recipientes: pares botão + ½, em duas colunas (1 a 6). */
+.containers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.container { display: flex; gap: 6px; min-width: 0; }
+.container .btn { flex-direction: column; gap: 2px; padding: 0 10px; }
+.container .btn:first-child { flex: 1; min-width: 0; }
+.container .btn span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.container .btn small { margin: 0; }
+.container .btn.half { width: 44px; flex: none; padding: 0; font-size: 17px; }
+.container-edit { display: grid; gap: 8px; }
+.container-row { display: grid; grid-template-columns: minmax(0, 1fr) 92px repeat(3, 32px); gap: 4px; align-items: center; }
+.container-row .field input { padding: 8px 0; font-size: 16px; }
+.container-row .water-size { min-height: 44px; }
+.container-row .icon-btn { width: 32px; height: 40px; font-size: 16px; }
 .water-size { display: flex; align-items: baseline; justify-content: center; gap: 2px; min-height: 52px; border: 1px solid var(--accent); border-radius: 99px; padding: 0 10px; }
 .water-size input { width: 100%; min-width: 0; border: 0; background: none; outline: none; text-align: right; font: 500 16px var(--mono); color: var(--ink); align-self: center; }
 .water-size small { font-size: 11px; color: var(--ink-3); }
