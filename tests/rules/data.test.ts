@@ -121,6 +121,9 @@ describe("regras: dados", () => {
     await assertFails(setDoc(doc(alice(), path), { updated_at: NOW, closed: [], extra: 1 }));
     await assertFails(setDoc(doc(alice(), path), { updated_at: "ontem", closed: [] }));
     await assertFails(setDoc(doc(alice(), path), { updated_at: NOW, closed: "slot:Jantar" }));
+    await assertFails(setDoc(doc(alice(), path), { updated_at: NOW, closed: [1] }));
+    await assertFails(setDoc(doc(alice(), path), { updated_at: NOW, closed: ["slot:Jantar", { x: 1 }] }));
+    await assertFails(setDoc(doc(alice(), path), { updated_at: NOW, closed: arrayUnion(7) }, { merge: true }));
     await assertSucceeds(deleteDoc(doc(alice(), path)));
   });
 

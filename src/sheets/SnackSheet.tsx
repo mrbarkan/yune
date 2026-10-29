@@ -2,17 +2,14 @@ import { useEffect, useState } from "react";
 import { deleteDoc } from "firebase/firestore";
 import { Sheet } from "@/components/Sheet";
 import { UndoToast } from "@/components/UndoToast";
-import { row, type Profile } from "@/lib/firebase";
+import { row } from "@/lib/firebase";
 import { midpoint } from "@/lib/gaps";
 import { loadHistory, loadRecipes, logChip } from "@/lib/quickLog";
-import { snackOptions, type QuickChip } from "@/lib/review";
+import { chipLabel, snackOptions, type QuickChip } from "@/lib/review";
 import { fmtNum, fmtTime, fromLocalInput, toLocalInput } from "@/lib/time";
-
-export const chipLabel = (s: string) => (s.length > 30 ? s.slice(0, 28) + "…" : s);
 
 /** "Beliscou algo?": um toque registra um lanche de costume no meio do intervalo [from, to]. */
 export function SnackSheet({ from, to, onClose, onLogged, onOther }: {
-  profile: Profile;
   from: string;
   to: string;
   onClose: () => void;

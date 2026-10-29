@@ -137,7 +137,8 @@ export async function processUser(uid: string, r: Reminders, d: Deps): Promise<n
   }
 
   // Lanche: 4 h sem refeição dentro da janela, nunca dormindo; no máximo 2 por dia, nunca o mesmo intervalo; sem números.
-  if (r.gap_enabled !== false && inWindow && !(await d.sleepingNow(uid))) {
+  // Só numa rodada sem outro envio (nada de duas notificações juntas); o intervalo segue aberto e sai numa próxima.
+  if (sent === 0 && r.gap_enabled !== false && inWindow && !(await d.sleepingNow(uid))) {
     // Início da janela de hoje (inWindow garante que não é negativo; mudança de horário de verão desloca, aceito).
     const windowStart = new Date(d.now.getTime() - (local.minutes - toMin(r.water_start)) * 60_000).toISOString();
     const raw = await d.lastMealAt(uid);

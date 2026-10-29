@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FoodItem, Meal, Recipe } from "./firebase";
-import { reviewRows, snackOptions } from "./review";
+import { answeredKeys, askAt, chipLabel, reviewRows, snackOptions } from "./review";
 
 // npm test roda com TZ=America/Sao_Paulo: horários abaixo são locais.
 const DAY = new Date(2026, 9, 27);
@@ -46,6 +46,21 @@ describe("snackOptions", () => {
     expect("item" in chips[2] && chips[2].item.kcal).toBe(130);
   });
 
+  it("itens de lanche e ceia antes dos itens das outras refeições", () => {
+    const lunch = (d: number) => meal("Arroz, alface", at(12, 0, d), [item("Arroz"), item("Alface, crespa, crua")]);
+    const history = [lunch(18), lunch(19), lunch(20), lunch(21), meal("Iogurte, granola", at(16, 0, 22), [item("Iogurte"), item("Granola")])];
+    expect(snackOptions(history, []).map((c) => c.label)).toEqual(["Iogurte, granola", "Iogurte", "Granola"]);
+  });
+
+  it("sem itens de lanche suficientes, completa com os das outras refeições", () => {
+    const history = [
+      meal("Arroz, alface", at(12, 0, 20), [item("Arroz"), item("Alface, crespa, crua")]),
+      meal("Arroz", at(12, 0, 21), [item("Arroz")]),
+      meal("Maçã", at(23, 30, 21), [item("Maçã")]),
+    ];
+    expect(snackOptions(history, []).map((c) => c.label)).toEqual(["Maçã", "Arroz", "Alface, crespa, crua"]);
+  });
+
   it("não repete o mesmo nome", () => {
     const history = [meal("Banana", at(16, 0, 20)), meal("Banana", at(12, 0, 21))];
     expect(snackOptions(history, [recipe("r1", "banana")]).map((c) => c.label)).toEqual(["Banana"]);
@@ -81,5 +96,37 @@ describe("reviewRows", () => {
   it("hoje à tarde: o jantar ainda não é perguntado", () => {
     const rows = reviewRows([meal("Café", at(8, 30)), meal("Almoço", at(12))], DAY, new Date(2026, 9, 27, 15, 30), WIN, []);
     expect(rows.map((r) => r.kind)).toEqual(["meal", "meal"]);
+  });
+});
+
+describe("answeredKeys", () => {
+  it("registrar no meio de um intervalo longo fecha as duas metades (não abre outra pergunta)", () => {
+    const meals = [meal("Café", at(8)), meal("Jantar", at(20, 30))];
+    const [gap] = reviewRows(meals, DAY, NIGHT, WIN, ["slot:Almoço"]).filter((r) => r.kind === "gap");
+    expect(gap?.kind).toBe("gap");
+    if (gap?.kind !== "gap") return;
+    const loggedAt = askAt(gap);
+    expect(loggedAt).toBe(at(14, 15));
+    const after = [...meals, meal("Iogurte", loggedAt)];
+    // Só a chave da pergunta: a metade depois do registro (14:15–20:30) viraria outra pergunta.
+    expect(reviewRows(after, DAY, NIGHT, WIN, ["slot:Almoço", gap.key]).filter((r) => r.kind === "gap").map((r) => r.key)).toEqual([loggedAt]);
+    const keys = answeredKeys(gap, loggedAt);
+    expect(keys).toEqual([at(8), loggedAt]);
+    expect(reviewRows(after, DAY, NIGHT, WIN, ["slot:Almoço", ...keys]).filter((r) => r.kind === "gap")).toEqual([]);
+  });
+
+  it("refeição faltando: só a própria chave, no horário da faixa", () => {
+    const [slot] = reviewRows([], DAY, NIGHT, WIN, []);
+    expect(slot?.kind).toBe("slot");
+    if (slot?.kind !== "slot") return;
+    expect(askAt(slot)).toBe(slot.slot.at);
+    expect(answeredKeys(slot, askAt(slot))).toEqual(["slot:Café da manhã"]);
+  });
+});
+
+describe("chipLabel", () => {
+  it("corta nomes longos", () => {
+    expect(chipLabel("Iogurte, granola")).toBe("Iogurte, granola");
+    expect(chipLabel("a".repeat(31))).toBe("a".repeat(28) + "…");
   });
 });

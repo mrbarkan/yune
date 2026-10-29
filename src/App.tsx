@@ -54,7 +54,7 @@ function Shell({ userId }: { userId: string }) {
   const [edit, setEdit] = useState<EditTarget | null>(null);
   // Lanche (de/até) ou dia a fechar, vindos do link, da notificação ou de Hoje.
   const [link, setLink] = useState<DeepLink>(null);
-  // "Outro…" do lanche: a folha de comida nasce nesse horário.
+  // "Outro…" do lanche e de Fechar o dia: a folha de comida nasce nesse horário.
   const [foodAt, setFoodAt] = useState<Date>();
   const [version, setVersion] = useState(0);
   const lastLoad = useRef(Date.now());
@@ -189,10 +189,13 @@ function Shell({ userId }: { userId: string }) {
       {sheet === "diet" && plan && <DietSheet plan={plan} onClose={close} />}
       {/* key no link, nunca em version: o bump depois de um registro não pode remontar a folha (o Desfazer some). */}
       {sheet === "snack" && link?.kind === "snack" && (
-        <SnackSheet key={link.from + link.to} profile={profile} from={link.from} to={link.to} onClose={close} onLogged={bump}
+        <SnackSheet key={link.from + link.to} from={link.from} to={link.to} onClose={close} onLogged={bump}
           onOther={(at) => { setLink(null); setFoodAt(at); setSheet("food"); }} />
       )}
-      {sheet === "review" && reviewDay && <CloseDaySheet key={dayId(reviewDay)} profile={profile} day={reviewDay} onClose={close} onLogged={bump} />}
+      {sheet === "review" && reviewDay && (
+        <CloseDaySheet key={dayId(reviewDay)} profile={profile} day={reviewDay} onClose={close} onLogged={bump}
+          onOther={(at) => { setLink(null); setFoodAt(at); setSheet("food"); }} />
+      )}
     </div>
   );
 }

@@ -186,6 +186,14 @@ describe("lembrete de lanche (intervalo)", () => {
     expect((await run({}, { lastMealAt: async () => "2026-10-19T16:00:00.000Z" })).payloads).toEqual([]);
   });
 
+  it("não sai na mesma rodada de outro lembrete; fica para a próxima", async () => {
+    const first = await run({ water_enabled: true });
+    expect(first.payloads.map((p) => p.tag)).toEqual(["water"]);
+    expect(first.patches).toEqual([{ last_water_at: now.toISOString() }]);
+    const next = await run({ water_enabled: true, last_water_at: now.toISOString() });
+    expect(next.payloads.map((p) => p.tag)).toEqual(["gap"]);
+  });
+
   it("doc antigo sem gap_enabled conta como ligado", async () => {
     const { gap_enabled: _, ...old } = base;
     const payloads: Payload[] = [];

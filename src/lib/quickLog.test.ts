@@ -76,6 +76,13 @@ describe("revisão do dia", () => {
     expect(opts).toEqual({ merge: true });
   });
 
+  it("closeInReview e openInReview levam várias chaves de uma vez", async () => {
+    await closeInReview("2026-10-27", "a", "b");
+    await openInReview("2026-10-27", "a", "b");
+    expect((calls[0].args[1] as { closed: unknown }).closed).toEqual({ union: ["a", "b"] });
+    expect((calls[1].args[1] as { closed: unknown }).closed).toEqual({ remove: ["a", "b"] });
+  });
+
   it("loadReview devolve as chaves fechadas, ou nada", async () => {
     expect(await loadReview("2026-10-27")).toEqual(["slot:Jantar"]);
     expect(await loadReview("2026-10-26")).toEqual([]);

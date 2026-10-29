@@ -43,9 +43,9 @@ export async function loadRecipes(): Promise<Recipe[]> {
   return rows<Recipe>(await getDocs(query(table("recipes"), orderBy("updated_at", "desc"))));
 }
 
-/** Marca um intervalo ou refeição como respondido na revisão do dia `day` (AAAA-MM-DD). */
-export async function closeInReview(day: string, key: string): Promise<void> {
-  await setDoc(row("day_reviews", day), { updated_at: new Date().toISOString(), closed: arrayUnion(key) }, { merge: true });
+/** Marca intervalos ou refeições como respondidos na revisão do dia `day` (AAAA-MM-DD). */
+export async function closeInReview(day: string, ...keys: string[]): Promise<void> {
+  await setDoc(row("day_reviews", day), { updated_at: new Date().toISOString(), closed: arrayUnion(...keys) }, { merge: true });
 }
 
 export async function loadReview(day: string): Promise<string[]> {
@@ -53,7 +53,7 @@ export async function loadReview(day: string): Promise<string[]> {
   return snap.exists() ? ((snap.data().closed as string[] | undefined) ?? []) : [];
 }
 
-/** Desfazer: a chave volta a ficar em aberto. */
-export async function openInReview(day: string, key: string): Promise<void> {
-  await setDoc(row("day_reviews", day), { updated_at: new Date().toISOString(), closed: arrayRemove(key) }, { merge: true });
+/** Desfazer: as chaves voltam a ficar em aberto. */
+export async function openInReview(day: string, ...keys: string[]): Promise<void> {
+  await setDoc(row("day_reviews", day), { updated_at: new Date().toISOString(), closed: arrayRemove(...keys) }, { merge: true });
 }

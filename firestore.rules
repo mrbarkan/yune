@@ -169,7 +169,9 @@ service cloud.firestore {
         allow read, delete: if owner(uid);
         allow create, update: if owner(uid) && day.matches('^\\d{4}-\\d{2}-\\d{2}$')
           && d().keys().hasOnly(['updated_at', 'closed'])
-          && iso(d().updated_at) && d().closed is list && d().closed.size() <= 40;
+          && iso(d().updated_at) && d().closed is list && d().closed.size() <= 40
+          // Conferência por amostra (as regras não percorrem listas): a primeira e a última chave, onde o arrayUnion acrescenta.
+          && (d().closed.size() == 0 || (d().closed[0] is string && d().closed[d().closed.size() - 1] is string));
       }
 
       // Questionário de saúde: um documento por data (AAAA-MM-DD).

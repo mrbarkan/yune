@@ -69,7 +69,10 @@ function chips(history: Meal[], keep: (name: string) => boolean, limit: number):
     .map((g) => g.meal);
 }
 
-export const snackChips = (history: Meal[], limit = 6) => chips(history, (n) => n === "Lanche" || n === "Ceia", limit);
+/** Faixas de lanche (por `mealName`). */
+export const isSnackSlot = (name: string) => name === "Lanche" || name === "Ceia";
+
+export const snackChips = (history: Meal[], limit = 6) => chips(history, isSnackSlot, limit);
 
 export const slotChips = (history: Meal[], slot: MissingSlot["slot"], limit = 4) => chips(history, (n) => n === slot, limit);
 

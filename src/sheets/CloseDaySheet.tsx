@@ -6,22 +6,21 @@ import { loadRange, splitByDay, totals, type DayData } from "@/lib/data";
 import { DEFAULT_REMINDERS } from "@/lib/defaults";
 import { remindersDoc, row, table, type Meal, type Profile, type Recipe, type Reminders } from "@/lib/firebase";
 import { fluidLabel } from "@/lib/fluids";
-import { midpoint, slotChips } from "@/lib/gaps";
+import { slotChips } from "@/lib/gaps";
 import { closeInReview, loadHistory, loadRecipes, loadReview, logChip, openInReview } from "@/lib/quickLog";
-import { mealChip, reviewRows, snackOptions, type QuickChip, type ReviewRow } from "@/lib/review";
+import { answeredKeys, askAt, chipLabel, mealChip, reviewRows, snackOptions, type QuickChip, type ReviewAsk } from "@/lib/review";
 import { addDays, backfillAt, dayId, fmtDayLong, fmtNum, fmtTime, startOfDay } from "@/lib/time";
 import { containersOf } from "@/lib/waterView";
-import { chipLabel } from "./SnackSheet";
-
-type Ask = Exclude<ReviewRow, { kind: "meal" }>;
 
 /** Fechar o dia `day`: o que foi registrado, refeições principais e intervalos ainda em aberto, e água. Tudo opcional. */
-export function CloseDaySheet({ profile, day, onClose, onLogged }: {
+export function CloseDaySheet({ profile, day, onClose, onLogged, onOther }: {
   profile: Profile;
   day: Date;
   onClose: () => void;
   /** Recarrega Hoje sem fechar a folha (o Desfazer continua na tela). */
   onLogged: () => void;
+  /** "Outro…": a folha de comida no horário da pergunta. */
+  onOther: (at: Date) => void;
 }) {
   const id = dayId(day);
   const [data, setData] = useState<DayData | null>(null);
@@ -33,7 +32,7 @@ export function CloseDaySheet({ profile, day, onClose, onLogged }: {
   const [loadErr, setLoadErr] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState<{ id: string; key: string } | null>(null);
+  const [toast, setToast] = useState<{ id: string; keys: string[] } | null>(null);
   const refresh = () => {
     setVersion((v) => v + 1);
     onLogged();
@@ -73,29 +72,32 @@ export function CloseDaySheet({ profile, day, onClose, onLogged }: {
   const rows = data && closed && win ? reviewRows(data.meals, day, now, win, closed) : null;
   const t = data ? totals(data) : null;
 
-  async function log(r: Ask, c: QuickChip) {
+  async function log(r: ReviewAsk, c: QuickChip) {
     setBusy(true);
     setErr("");
+    const at = askAt(r);
+    // No intervalo, a metade depois do registro também fica respondida (senão uma resposta abriria outra pergunta).
+    const keys = answeredKeys(r, at);
     let mealId: string;
     try {
-      mealId = await logChip(c, r.kind === "slot" ? r.slot.at : midpoint(r.gap.from, r.gap.to));
+      mealId = await logChip(c, at);
     } catch {
       setBusy(false);
       return setErr("Não foi possível salvar.");
     }
     navigator.vibrate?.(8);
     try {
-      await closeInReview(id, r.key);
-      setClosed((k) => [...(k ?? []), r.key]);
+      await closeInReview(id, ...keys);
+      setClosed((k) => [...(k ?? []), ...keys]);
     } catch {
       setErr("Registrado, mas não foi possível marcar como respondido.");
     }
-    setToast({ id: mealId, key: r.key });
+    setToast({ id: mealId, keys });
     refresh();
     setBusy(false);
   }
 
-  async function undo({ id: mealId, key }: { id: string; key: string }) {
+  async function undo({ id: mealId, keys }: { id: string; keys: string[] }) {
     setToast(null);
     setErr("");
     try {
@@ -105,8 +107,8 @@ export function CloseDaySheet({ profile, day, onClose, onLogged }: {
     }
     refresh();
     try {
-      await openInReview(id, key);
-      setClosed((k) => (k ?? []).filter((x) => x !== key));
+      await openInReview(id, ...keys);
+      setClosed((k) => (k ?? []).filter((x) => !keys.includes(x)));
     } catch {
       setErr("Refeição apagada, mas a pergunta não voltou.");
     }
@@ -137,7 +139,7 @@ export function CloseDaySheet({ profile, day, onClose, onLogged }: {
     refresh();
   }
 
-  const asks = rows?.filter((r): r is Ask => r.kind !== "meal") ?? [];
+  const asks = rows?.filter((r): r is ReviewAsk => r.kind !== "meal") ?? [];
 
   return (
     <Sheet title="Fechar o dia" onClose={onClose}>
@@ -167,6 +169,7 @@ export function CloseDaySheet({ profile, day, onClose, onLogged }: {
                           {chipLabel(c.label)} <em>{fmtNum(c.kcal)}</em>
                         </button>
                       ))}
+                      <button className="chip" disabled={busy} onClick={() => onOther(new Date(askAt(r)))}>Outro…</button>
                       <button className="chip" disabled={busy} onClick={() => nothing(r.key)}>Nada</button>
                     </div>
                   </div>
@@ -193,10 +196,11 @@ export function CloseDaySheet({ profile, day, onClose, onLogged }: {
       {t && <p className="note">{fluidLabel(t.fluidMl, t.waterMl)}</p>}
 
       {err && <p className="note err">{err}</p>}
+      {/* Antes do Pronto: o aviso fica preso ao pé da folha e, depois dele, cobriria o botão. */}
+      {toast && <UndoToast key={toast.id} onUndo={() => undo(toast)} onExpire={() => setToast(null)} />}
       <div className="actions">
         <button className="btn primary" onClick={onClose}>Pronto</button>
       </div>
-      {toast && <UndoToast key={toast.id} onUndo={() => undo(toast)} onExpire={() => setToast(null)} />}
     </Sheet>
   );
 }
