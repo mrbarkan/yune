@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FoodItem, Recipe } from "./firebase";
 import { nutrition } from "./foods";
-import { amountToGrams, batchValid, fmtYield, keptYield, gramsPerUnit, recipeFood, recipeTotals, suggestRecipeName, UNIT_LABEL } from "./recipes";
+import { amountToGrams, batchValid, fmtYield, gramsPerUnit, keptYield, recipeFood, recipeItem, recipeTotals, suggestRecipeName, UNIT_LABEL } from "./recipes";
 
 const item = (name: string, grams: number, kcal: number): FoodItem => ({ name, quantity: `${grams} g`, grams, kcal, protein_g: 0, carbs_g: 0, fat_g: 0 });
 const NOW = "2026-10-28T12:00:00.000Z";
@@ -95,6 +95,24 @@ describe("fmtYield", () => {
     expect(fmtYield(1, "ml")).toBe("1 ml");
     expect(fmtYield(500, "ml")).toBe("500 ml");
     expect(fmtYield(1.25, "g")).toBe("1,3 g");
+  });
+});
+
+describe("recipeItem", () => {
+  it("primeira porção como item: ml de bebida e o id da receita", () => {
+    expect(recipeItem(shake)).toEqual({
+      name: "Shake", quantity: "copo (200 ml)", grams: 200, ...nutrition(recipeFood(shake), 200), recipe_id: "r1", ml: 200,
+    });
+  });
+
+  it("receita em porções não conta como líquido", () => {
+    const it = recipeItem(feijao);
+    expect(it).toMatchObject({ quantity: "1 porção", grams: 200, kcal: 150, recipe_id: "r2" });
+    expect(it.ml).toBeUndefined();
+  });
+
+  it("rendimento inválido lança", () => {
+    expect(() => recipeItem({ ...shake, yield_amount: 0 })).toThrow();
   });
 });
 

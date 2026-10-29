@@ -359,6 +359,11 @@ input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; bo
 .divider { display: flex; align-items: center; gap: 12px; color: var(--ink-3); font: 500 10.5px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; margin: 0; }
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
+/* Registro rápido: lanche de um toque e o aviso com Desfazer (preso ao pé da folha). */
+.snack-time { justify-self: start; }
+.toast { position: sticky; bottom: 8px; justify-self: center; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 6px 0 18px; border-radius: 99px; background: var(--ink); color: var(--paper); font-size: 14px; animation: rise 0.3s var(--ease) both; }
+.toast button { min-height: 36px; padding: 0 12px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
 /* ---------- navegação ---------- */
 .tabbar {
   position: fixed; z-index: 20; left: 50%; transform: translateX(-50%);

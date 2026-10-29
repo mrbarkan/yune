@@ -1,5 +1,6 @@
 import type { FoodItem, Recipe, RecipeUnit } from "./firebase";
-import { searchText, type Food, type Portion } from "./foods";
+import { drinkMl } from "./fluids";
+import { nutrition, searchText, type Food, type Portion } from "./foods";
 
 export const UNIT_LABEL: Record<RecipeUnit, string> = { ml: "ml", g: "g", porcoes: "porções" };
 
@@ -65,6 +66,14 @@ export function recipeFood(r: Recipe): Food {
     portions: portions(r),
     search: searchText(r.name),
   };
+}
+
+/** Primeira porção da receita como item de refeição (registro de um toque). Lança com rendimento inválido. */
+export function recipeItem(r: Recipe): FoodItem {
+  const food = recipeFood(r);
+  const p = food.portions[0];
+  const ml = drinkMl(food, p.g);
+  return { name: r.name, quantity: p.label, grams: Math.round(p.g), ...nutrition(food, p.g), recipe_id: r.id, ...(ml ? { ml } : {}) };
 }
 
 /** "Leite semidesnatado e Banana" (até 40 caracteres). */

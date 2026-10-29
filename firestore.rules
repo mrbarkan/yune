@@ -162,7 +162,6 @@ service cloud.firestore {
           && d().path is string && d().path.matches('^body-photos/' + uid + '/[^/]+$');
       }
 
-      // Questionário de saúde: um documento por data (AAAA-MM-DD).
       // Revisão do dia: intervalos e refeições já respondidos (src/lib/quickLog.ts).
       match /day_reviews/{day} {
         allow read, delete: if owner(uid);
@@ -171,6 +170,7 @@ service cloud.firestore {
           && iso(d().updated_at) && d().closed is list && d().closed.size() <= 40;
       }
 
+      // Questionário de saúde: um documento por data (AAAA-MM-DD).
       match /anamnesis/{day} {
         allow read, delete: if owner(uid);
         allow create, update: if owner(uid) && day.matches('^\\d{4}-\\d{2}-\\d{2}$')

@@ -57,7 +57,7 @@ function fromAiItem(it: FoodItem): Food {
 }
 
 /** Nova refeição, a refeição `meal` já salva para corrigir, ou os ingredientes da receita `recipe`. */
-export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, onClose, onSaved, onSavedRecipe, onProfile }: {
+export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, initialAt, onClose, onSaved, onSavedRecipe, onProfile }: {
   profile: Profile;
   plan: DietPlan | null;
   dietOn: boolean;
@@ -66,13 +66,15 @@ export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, onClose, o
   recipe?: Recipe;
   /** Dia visto em Hoje: uma refeição nova num dia anterior começa nessa data. */
   day?: Date;
+  /** Horário inicial de uma refeição nova (vence `day`), como o "Outro…" do lanche. */
+  initialAt?: Date;
   onClose: () => void;
   onSaved: () => void;
   onSavedRecipe?: () => void;
   /** Recarrega o perfil (depois de autorizar a IA). */
   onProfile?: () => void;
 }) {
-  const [at, setAt] = useState(() => toLocalInput(meal ? new Date(meal.eaten_at) : backfillAt(day ?? new Date(), new Date())));
+  const [at, setAt] = useState(() => toLocalInput(meal ? new Date(meal.eaten_at) : initialAt ?? backfillAt(day ?? new Date(), new Date())));
   const [place, setPlace] = useState<Place>(() => meal?.place ?? lastPlace());
   const [query, setQuery] = useState("");
   const [plate, setPlate] = useState<PlateItem[]>(() => (recipe ? plateFromItems(recipe.items) : meal ? plateFromMeal(meal) : []));

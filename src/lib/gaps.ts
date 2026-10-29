@@ -25,7 +25,10 @@ const clock = (day: Date, hhmm: string) => {
 const ofDay = (mealsAt: string[], day: Date) =>
   mealsAt.map((s) => new Date(s)).filter((d) => sameDay(d, day)).sort((a, b) => a.getTime() - b.getTime());
 
-/** Intervalos de 4 h ou mais entre refeições do dia, e da última até agora (hoje) ou o fim da janela. Sem intervalo antes da primeira. */
+/**
+ * Intervalos de 4 h ou mais entre refeições do dia, e da última até agora (hoje) ou o fim da janela. Sem intervalo antes da primeira.
+ * `window.start` fica sem uso de propósito: não há intervalo inicial; café da manhã faltando é de `missingSlots`.
+ */
 export function findGaps(mealsAt: string[], day: Date, now: Date, window: { start: string; end: string }): Gap[] {
   const meals = ofDay(mealsAt, day);
   if (!meals.length) return [];
