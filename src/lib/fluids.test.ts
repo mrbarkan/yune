@@ -18,7 +18,21 @@ describe("bebidas", () => {
     for (const n of [
       "Cerveja pilsen", "Caipirinha", "Cana, aguardente 1", "Salsicha", "Bolacha", "Tomate", "Pudim de leite", "Chocolate ao leite",
       "Doce de leite", "Leite condensado", "Leite em pó", "Achocolatado, pó", "Café, pó, torrado", "Vitamina C", "Caldo de carne, tablete", "Banana",
+      "Caju, suco concentrado, envasado", "Suco concentrado de uva", "Leite, de coco", "Leite de coco", "Bolo de café", "Sorvete de café",
+      "Pudim de café", "Biscoito de chá", "Bala de café", "Doce de café",
     ]) expect(drinkMl(named(n), 200), n).toBeNull();
+  });
+
+  it("suplemento só conta se o nome diz shake ou bebida", () => {
+    const sup = (name: string) => ({ name, source: "suplemento" as const });
+    expect(drinkMl(sup("Body Coffee Protein (café com TCM)"), 30)).toBeNull();
+    expect(drinkMl(sup("Supercoffee 3.0 Vanilla Latte"), 10)).toBeNull();
+    expect(drinkMl(sup("+Mu Bebida Láctea com Whey"), 250)).toBe(250);
+    expect(drinkMl(sup("Shake proteico de baunilha"), 300)).toBe(300);
+  });
+
+  it("chá de erva-doce continua contando", () => {
+    expect(isDrinkName("Chá de erva-doce")).toBe(true);
   });
 
   it("álcool nunca conta, mesmo marcado como bebida", () => {

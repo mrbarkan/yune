@@ -5,13 +5,16 @@ import { fmtLiters } from "./time";
 
 const ALCOHOL = /\b(cervejas?|vinhos?|aguardente|cachaca|pinga|vodka|whiske?y|gin|rum|tequila|drinks?|caipirinhas?)\b/;
 
+// Sólidos que citam café/chá/leite ("Bolo de café", "Sorvete de café").
+const SOLID = /\b(bolos?|sorvetes?|pudins?|pudim|biscoitos?|bolachas?|balas?|(?<!erva )doces?)\b/;
+
 /** Bebida pelo nome: [palavra que conta, exceções]. */
 const DRINKS: [RegExp, RegExp?][] = [
-  [/\bsucos?\b/],
+  [/\bsucos?\b/, /\bconcentrad/],
   [/\brefrigerantes?\b/],
   [/\bcafe\b/, /\btorrado\b/],
   [/\bcha\b/],
-  [/\bleite\b/, /\bcondensado\b|\bem po\b|\bpudim\b|chocolate ao leite|doce de leite|creme de leite|pao de leite|\bbolo\b|\bmingau\b|arroz doce|\bcanjica\b/],
+  [/\bleite\b/, /\bcondensado\b|\bem po\b|\bpudim\b|chocolate ao leite|doce de leite|creme de leite|pao de leite|\bbolo\b|\bmingau\b|arroz doce|\bcanjica\b|\bde coco\b/],
   [/\bagua de coco\b/],
   [/\bbebida\b/],
   [/\bshakes?\b/],
@@ -31,13 +34,15 @@ export const isAlcohol = (name: string) => ALCOHOL.test(norm(name));
 /** Nome de bebida que conta como líquido; pó ("Café, pó") e álcool não. */
 export function isDrinkName(name: string): boolean {
   const n = norm(name);
-  if (/\bpo\b/.test(n) || ALCOHOL.test(n)) return false;
+  if (/\bpo\b/.test(n) || ALCOHOL.test(n) || SOLID.test(n)) return false;
   return DRINKS.some(([yes, no]) => yes.test(n) && !no?.test(n));
 }
 
 /** Quanto do item conta como líquido (ml = g), ou null se não é bebida. */
 export function drinkMl(food: Pick<Food, "name" | "drink" | "source"> & { unit?: RecipeUnit }, grams: number): number | null {
   if (isAlcohol(food.name)) return null;
+  // Suplemento é pó para misturar: só conta o que já vem pronto para beber.
+  if (food.source === "suplemento") return /\b(shakes?|bebida)\b/.test(norm(food.name)) ? Math.round(grams) : null;
   const drink = food.drink || (food.source === "receita" && food.unit === "ml") || isDrinkName(food.name);
   return drink ? Math.round(grams) : null;
 }

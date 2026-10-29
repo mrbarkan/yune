@@ -331,7 +331,8 @@ input[type="range"]::-moz-range-thumb { width: 26px; height: 26px; border: 0; bo
 .glass { position: relative; height: 200px; border-radius: 18px; overflow: hidden; background: var(--paper-2); display: grid; place-items: center; align-content: center; gap: 6px; }
 .glass-fill { position: absolute; left: 0; right: 0; bottom: 0; background: var(--water); opacity: 0.4; transition: height 0.9s var(--ease); }
 .glass-fill::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--water); }
-.glass-fill.drinks { opacity: 0.18; transition: height 0.9s var(--ease), bottom 0.9s var(--ease); }
+/* Bebidas: tinta clara no fundo (não opacity, que apagaria a linha do topo, desenhada em --water cheio). */
+.glass-fill.drinks { opacity: 1; background: color-mix(in srgb, var(--water) 18%, transparent); transition: height 0.9s var(--ease), bottom 0.9s var(--ease); }
 .glass .big-num, .glass-sub { position: relative; }
 .glass-sub { font-size: 12px; color: var(--ink-2); }
 .water-buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
