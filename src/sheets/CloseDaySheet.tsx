@@ -8,7 +8,7 @@ import { remindersDoc, row, table, type Meal, type Profile, type Recipe, type Re
 import { fluidLabel } from "@/lib/fluids";
 import { slotChips } from "@/lib/gaps";
 import { closeInReview, loadHistory, loadRecipes, loadReview, logChip, openInReview } from "@/lib/quickLog";
-import { answeredKeys, askAt, chipLabel, mealChip, reviewRows, snackOptions, type QuickChip, type ReviewAsk } from "@/lib/review";
+import { answeredKeys, askAt, chipLabel, mealChip, pendingReview, reviewRows, snackOptions, type PendingReview, type QuickChip, type ReviewAsk } from "@/lib/review";
 import { addDays, backfillAt, dayId, fmtDayLong, fmtNum, fmtTime, startOfDay } from "@/lib/time";
 import { containersOf } from "@/lib/waterView";
 
@@ -19,8 +19,8 @@ export function CloseDaySheet({ profile, day, onClose, onLogged, onOther }: {
   onClose: () => void;
   /** Recarrega Hoje sem fechar a folha (o Desfazer continua na tela). */
   onLogged: () => void;
-  /** "Outro…": a folha de comida no horário da pergunta. */
-  onOther: (at: Date) => void;
+  /** "Outro…": a folha de comida no horário da pergunta; ao salvar, `review` fecha a pergunta. */
+  onOther: (at: Date, review: PendingReview) => void;
 }) {
   const id = dayId(day);
   const [data, setData] = useState<DayData | null>(null);
@@ -169,7 +169,7 @@ export function CloseDaySheet({ profile, day, onClose, onLogged, onOther }: {
                           {chipLabel(c.label)} <em>{fmtNum(c.kcal)}</em>
                         </button>
                       ))}
-                      <button className="chip" disabled={busy} onClick={() => onOther(new Date(askAt(r)))}>Outro…</button>
+                      <button className="chip" disabled={busy} onClick={() => onOther(new Date(askAt(r)), pendingReview(id, r))}>Outro…</button>
                       <button className="chip" disabled={busy} onClick={() => nothing(r.key)}>Nada</button>
                     </div>
                   </div>

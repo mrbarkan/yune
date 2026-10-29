@@ -6,7 +6,9 @@ import { useDietPlan } from "@/lib/diet";
 import { canUse, stripeActive, useEntitlements } from "@/lib/pro";
 import { dayFromId, parseDeepLink, withoutDeepLink, type DeepLink } from "@/lib/deepLink";
 import { parseProReturn, withoutProParam } from "@/lib/proReturn";
+import { closeInReview } from "@/lib/quickLog";
 import { shouldRefresh } from "@/lib/refresh";
+import type { PendingReview } from "@/lib/review";
 import { dayId, startOfDay } from "@/lib/time";
 import Auth from "@/screens/Auth";
 import Today, { type EditTarget } from "@/screens/Today";
@@ -56,6 +58,8 @@ function Shell({ userId }: { userId: string }) {
   const [link, setLink] = useState<DeepLink>(null);
   // "Outro…" do lanche e de Fechar o dia: a folha de comida nasce nesse horário.
   const [foodAt, setFoodAt] = useState<Date>();
+  // "Outro…" de Fechar o dia: a pergunta que a refeição salva responde.
+  const [pending, setPending] = useState<PendingReview | null>(null);
   const [version, setVersion] = useState(0);
   const lastLoad = useRef(Date.now());
   const bump = useCallback(() => {
@@ -67,11 +71,13 @@ function Shell({ userId }: { userId: string }) {
     setEdit(null);
     setLink(null);
     setFoodAt(undefined);
+    setPending(null);
   }, []);
   const openLink = useCallback((l: DeepLink) => {
     if (!l) return;
     setEdit(null);
     setFoodAt(undefined);
+    setPending(null);
     setLink(l);
     setSheet(l.kind);
   }, []);
@@ -102,6 +108,11 @@ function Shell({ userId }: { userId: string }) {
     bump();
     close();
   }, [bump, close]);
+  const savedFood = useCallback((eatenAt?: string) => {
+    // A refeição já está salva: se fechar a pergunta falhar, ela só volta em Fechar o dia.
+    if (pending && eatenAt) closeInReview(pending.day, ...pending.keys(eatenAt)).catch(() => {});
+    saved();
+  }, [pending, saved]);
 
   const ent = useEntitlements(userId);
   const dietAllowed = canUse(ent, "diet");
@@ -168,7 +179,7 @@ function Shell({ userId }: { userId: string }) {
               ["water", "Água", "um copo"],
               ["sleep", "Sono", "dormir · acordar"],
             ] as const).map(([k, label, hint], i) => (
-              <button key={k} className={`quick-item ${k}`} style={{ animationDelay: `${i * 35}ms` }} onClick={() => { setFoodAt(undefined); setSheet(k); }}>
+              <button key={k} className={`quick-item ${k}`} style={{ animationDelay: `${i * 35}ms` }} onClick={() => { setFoodAt(undefined); setPending(null); setSheet(k); }}>
                 <i />
                 <b>{label}</b>
                 <small>{hint}</small>
@@ -177,7 +188,7 @@ function Shell({ userId }: { userId: string }) {
           </div>
         </div>
       )}
-      {sheet === "food" && <FoodSheet profile={profile} plan={plan} dietOn={dietAllowed} day={newDay} initialAt={foodAt} onClose={close} onSaved={saved} onProfile={reload} />}
+      {sheet === "food" && <FoodSheet profile={profile} plan={plan} dietOn={dietAllowed} day={newDay} initialAt={foodAt} onClose={close} onSaved={savedFood} onProfile={reload} />}
       {sheet === "move" && <MoveSheet profile={profile} day={newDay} onClose={close} onSaved={saved} />}
       {sheet === "water" && <WaterSheet profile={profile} day={newDay} onClose={close} onSaved={bump} onProfile={reload} />}
       {sheet === "sleep" && <SleepSheet day={newDay} onClose={close} onSaved={saved} />}
@@ -194,7 +205,7 @@ function Shell({ userId }: { userId: string }) {
       )}
       {sheet === "review" && reviewDay && (
         <CloseDaySheet key={dayId(reviewDay)} profile={profile} day={reviewDay} onClose={close} onLogged={bump}
-          onOther={(at) => { setLink(null); setFoodAt(at); setSheet("food"); }} />
+          onOther={(at, review) => { setLink(null); setFoodAt(at); setPending(review); setSheet("food"); }} />
       )}
     </div>
   );

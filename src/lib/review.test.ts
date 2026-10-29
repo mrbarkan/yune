@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FoodItem, Meal, Recipe } from "./firebase";
-import { answeredKeys, askAt, chipLabel, reviewRows, snackOptions } from "./review";
+import { answeredKeys, askAt, chipLabel, pendingReview, reviewRows, snackOptions } from "./review";
 
 // npm test roda com TZ=America/Sao_Paulo: horários abaixo são locais.
 const DAY = new Date(2026, 9, 27);
@@ -121,6 +121,27 @@ describe("answeredKeys", () => {
     if (slot?.kind !== "slot") return;
     expect(askAt(slot)).toBe(slot.slot.at);
     expect(answeredKeys(slot, askAt(slot))).toEqual(["slot:Café da manhã"]);
+  });
+});
+
+describe("pendingReview", () => {
+  it("\"Outro…\" num intervalo: fecha a pergunta e a metade depois do horário salvo, mesmo se a pessoa mudou o horário", () => {
+    const meals = [meal("Café", at(8)), meal("Jantar", at(20, 30))];
+    const [gap] = reviewRows(meals, DAY, NIGHT, WIN, ["slot:Almoço"]).filter((r) => r.kind === "gap");
+    if (gap?.kind !== "gap") throw new Error("sem intervalo");
+    const p = pendingReview("2026-10-27", gap);
+    expect(p.day).toBe("2026-10-27");
+    // Horário trocado na folha de comida (16:00 em vez de 14:15).
+    const savedAt = at(16);
+    expect(p.keys(savedAt)).toEqual([at(8), savedAt]);
+    const after = [...meals, meal("Iogurte", savedAt)];
+    expect(reviewRows(after, DAY, NIGHT, WIN, ["slot:Almoço", ...p.keys(savedAt)]).filter((r) => r.kind === "gap")).toEqual([]);
+  });
+
+  it("refeição faltando: só a própria chave", () => {
+    const [slot] = reviewRows([], DAY, NIGHT, WIN, []);
+    if (slot?.kind !== "slot") throw new Error("sem refeição faltando");
+    expect(pendingReview("2026-10-27", slot).keys(at(7))).toEqual(["slot:Café da manhã"]);
   });
 });
 

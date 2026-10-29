@@ -22,7 +22,7 @@ PWA de diário de saúde (comida, movimento, água, sono). Todo texto de interfa
   (app, `sendReminders`, exportação). O copo mostra a água pura na camada cheia e as bebidas numa camada mais clara. Recipientes em `water_containers`
   no perfil (1 a 6 `{ name, ml }`; sem eles, vêm de `water_sizes`), com ½.
 - Lanches e Fechar o dia: lógica pura em `src/lib/gaps.ts` (intervalos, refeições faltando). `sendReminders` pergunta "Beliscou algo…?" após 4 h sem refeição
-  dentro de `water_start`–`water_end`, nunca dormindo, no máximo 2 por dia, nunca o mesmo intervalo duas vezes e nunca com números; `gap_enabled` (padrão true,
+  dentro de `water_start`–`water_end`, nunca dormindo, no máximo 2 por dia, nunca o mesmo intervalo duas vezes, só numa rodada em que nenhum outro lembrete saiu e nunca com números; `gap_enabled` (padrão true,
   ausente = ligado); `last_gap_at`/`gap_count_date`/`gap_count` só do servidor. Links `?registrar=lanche&de=&ate=` (SnackSheet) e `?fechar=AAAA-MM-DD`
   (CloseDaySheet) em `src/lib/deepLink.ts`; com o app aberto, o SW manda a URL por `postMessage`. "Fechar o dia" abre pelo resumo das 21:30 e por Hoje depois das 19h;
   o que a pessoa fecha fica em `users/{uid}/day_reviews/{AAAA-MM-DD}` = `{ updated_at, closed }`.

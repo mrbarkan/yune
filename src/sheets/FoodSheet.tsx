@@ -69,7 +69,8 @@ export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, initialAt,
   /** Horário inicial de uma refeição nova (vence `day`), como o "Outro…" do lanche. */
   initialAt?: Date;
   onClose: () => void;
-  onSaved: () => void;
+  /** `eatenAt`: horário salvo da refeição (só ao salvar uma refeição). */
+  onSaved: (eatenAt?: string) => void;
   onSavedRecipe?: () => void;
   /** Recarrega o perfil (depois de autorizar a IA). */
   onProfile?: () => void;
@@ -281,7 +282,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, initialAt,
     } catch {
       /* armazenamento indisponível */
     }
-    onSaved();
+    onSaved(fields.eaten_at);
   }
 
   const when = new Date(at);

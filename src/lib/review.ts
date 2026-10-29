@@ -93,3 +93,7 @@ export const askAt = (r: ReviewAsk) => (r.kind === "slot" ? r.slot.at : midpoint
  * Registrar no meio divide o intervalo; num de 8 h ou mais, sem isso a resposta abriria outra pergunta logo abaixo.
  */
 export const answeredKeys = (r: ReviewAsk, at: string): string[] => (r.kind === "gap" ? [r.key, new Date(at).toISOString()] : [r.key]);
+
+/** "Outro…" de Fechar o dia: o dia e as chaves que a refeição salva na folha de comida responde, pelo horário salvo. */
+export type PendingReview = { day: string; keys: (loggedAt: string) => string[] };
+export const pendingReview = (day: string, r: ReviewAsk): PendingReview => ({ day, keys: (loggedAt) => answeredKeys(r, loggedAt) });
