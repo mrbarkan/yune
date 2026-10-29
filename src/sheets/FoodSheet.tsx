@@ -9,6 +9,7 @@ import { PrivateImage } from "@/components/PrivateImage";
 import { deleteObject, ref, uploadBytes } from "firebase/storage";
 import { estimateFood, row, rows, storage, table, type CustomFood, type DietPlan, type FoodItem, type Meal, type Place, type Profile, type Recipe } from "@/lib/firebase";
 import { amountToGrams, fmtAmount, recipeFood, UNIT_LABEL } from "@/lib/recipes";
+import { rescale, SCALE_LABEL, SCALES, type Scale } from "@/lib/plate";
 import { BatchCard, type BatchResult } from "./BatchCard";
 import { backfillAt, fmtNum, fmtTime, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
 
@@ -78,6 +79,8 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [label, setLabel] = useState<Label | null>(null);
   const [batch, setBatch] = useState(false);
+  // Tamanho do prato inteiro; volta a 1 quando entra ou sai item, para não escalar o novo.
+  const [scale, setScale] = useState<Scale>(1);
   const [busy, setBusy] = useState<"" | "ai" | "label" | "save">("");
   const [err, setErr] = useState("");
   const [notes, setNotes] = useState("");
@@ -127,6 +130,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
   const add = (food: Food, opts: Partial<PlateItem> = {}) => {
     const id = newId();
     setPlate((p) => [...p, { id, food, portion: food.portions[0], qty: 1, ...opts }]);
+    setScale(1);
     setOpen(id);
     setQuery("");
     navigator.vibrate?.(6);
@@ -149,6 +153,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
     const items = (data.items ?? []) as FoodItem[];
     setNotes(items.length ? "" : data.notes);
     setPlate((p) => [...p, ...items.map((it) => ({ id: newId(), food: fromAiItem(it), portion: { label: it.quantity, g: it.grams || 100 }, qty: 1, ai: true }))]);
+    setScale(1);
     setOpen(null);
     setQuery("");
   }
@@ -228,6 +233,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
     const ai = used.some((l) => l.ai) || undefined;
     setPlate((p) => [...p.filter((x) => !r.picked.includes(x.id)), { id: newId(), food, portion, qty: 1, ai }]);
     setRecipes((list) => [food, ...list]);
+    setScale(1);
     setOpen(null);
     setBatch(false);
   }
@@ -280,6 +286,19 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
     : [];
 
   const update = (id: string, patch: Partial<PlateItem>) => setPlate((p) => p.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  const remove = (id: string) => {
+    setPlate((p) => p.filter((x) => x.id !== id));
+    setScale(1);
+    if (plate.length <= 1) setBatch(false);
+  };
+  const resize = (to: Scale) => {
+    setPlate((p) => {
+      const qtys = rescale(p.map((x) => x.qty), scale, to);
+      return p.map((x, i) => ({ ...x, qty: qtys[i] }));
+    });
+    setScale(to);
+  };
+  const step = (qty: number, d: number) => Math.round((qty + d) * 100) / 100;
   const addResult = (f: Food) => add(f, { portion: pickPortion(f, parsed), qty: parsed.qty });
 
   return (
@@ -421,6 +440,13 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
       {(plate.length > 0 || photo) && (
         <div className="plate">
           {photo ? <img className="plate-photo" src={photo.preview} alt="Foto do prato" /> : meal?.photo_path ? <PrivateImage path={meal.photo_path} className="plate-photo" alt="Foto do prato" /> : null}
+          {plate.length > 1 && (
+            <div className="chips plate-scale" role="group" aria-label="Tamanho do prato">
+              {SCALES.map((s) => (
+                <button key={s} className={s === scale ? "chip on" : "chip"} aria-pressed={s === scale} onClick={() => resize(s)}>{SCALE_LABEL[s]}</button>
+              ))}
+            </div>
+          )}
           <ul>
             {lines.map((l) => (
               <li key={l.id}>
@@ -429,10 +455,10 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
                   <small>{portionLabel(l.portion)}</small>
                 </button>
                 <div className="stepper">
-                  <button onClick={() => (l.qty <= 0.5 ? setPlate((p) => p.filter((x) => x.id !== l.id)) : update(l.id, { qty: l.qty - 0.5 }))}
+                  <button onClick={() => (l.qty <= 0.5 ? remove(l.id) : update(l.id, { qty: step(l.qty, -0.5) }))}
                     aria-label="Menos">{l.qty <= 0.5 ? "×" : "−"}</button>
                   <span>{String(l.qty).replace(".", ",")}</span>
-                  <button onClick={() => update(l.id, { qty: l.qty + 0.5 })} aria-label="Mais">+</button>
+                  <button onClick={() => update(l.id, { qty: step(l.qty, 0.5) })} aria-label="Mais">+</button>
                 </div>
                 <span className="num">{fmtNum(l.n.kcal)}</span>
                 {open === l.id && (
