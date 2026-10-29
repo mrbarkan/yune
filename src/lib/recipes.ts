@@ -25,6 +25,10 @@ export const amountToGrams = (r: Yield, amount: number) => amount * gramsPerUnit
 /** 200 → "200", 1.5 → "1,5". */
 export const fmtAmount = (n: number) => String(Math.round(n * 10) / 10).replace(".", ",");
 
+/** 500 ml → "500 ml"; 1 porção → "1 porção" (singular só no 1). */
+export const fmtYield = (n: number, u: RecipeUnit) =>
+  `${fmtAmount(n)} ${u === "porcoes" && fmtAmount(n) === "1" ? "porção" : UNIT_LABEL[u]}`;
+
 function portions(r: Yield): Portion[] {
   const n = r.yield_amount;
   if (r.yield_unit === "porcoes") {
@@ -65,9 +69,13 @@ export function suggestRecipeName(items: FoodItem[]): string {
   return s.length > 40 ? `${s.slice(0, 39).trimEnd()}…` : s;
 }
 
+/** Faixa do rendimento aceita pelas regras do Firestore. */
+export const YIELD_MIN = 0.5;
+export const YIELD_MAX = 20000;
+
 /** "Fiz mais do que comi": null quando dá para salvar; senão, o aviso. */
 export function batchValid(yieldAmount: number, eaten: number): string | null {
-  if (!(yieldAmount > 0)) return "Informe quanto rendeu.";
+  if (!(yieldAmount >= YIELD_MIN)) return "Informe quanto rendeu.";
   if (!(eaten > 0)) return "Informe quanto você comeu.";
   if (eaten > yieldAmount) return "Você comeu mais do que rendeu?";
   return null;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FoodItem, Recipe } from "./firebase";
 import { nutrition } from "./foods";
-import { amountToGrams, batchValid, gramsPerUnit, recipeFood, recipeTotals, suggestRecipeName, UNIT_LABEL } from "./recipes";
+import { amountToGrams, batchValid, fmtYield, gramsPerUnit, recipeFood, recipeTotals, suggestRecipeName, UNIT_LABEL } from "./recipes";
 
 const item = (name: string, grams: number, kcal: number): FoodItem => ({ name, quantity: `${grams} g`, grams, kcal, protein_g: 0, carbs_g: 0, fat_g: 0 });
 const NOW = "2026-10-28T12:00:00.000Z";
@@ -79,5 +79,19 @@ describe("receitas", () => {
     expect(batchValid(500, 0)).toBe("Informe quanto você comeu.");
     expect(batchValid(500, 600)).toBe("Você comeu mais do que rendeu?");
     expect(batchValid(Number.NaN, 200)).toBe("Informe quanto rendeu.");
+    // A regra do Firestore exige rendimento de 0,5 a 20000.
+    expect(batchValid(0.4, 0.2)).toBe("Informe quanto rendeu.");
+    expect(batchValid(0.5, 0.5)).toBeNull();
+  });
+});
+
+describe("fmtYield", () => {
+  it("usa o singular só para 1 porção", () => {
+    expect(fmtYield(1, "porcoes")).toBe("1 porção");
+    expect(fmtYield(2, "porcoes")).toBe("2 porções");
+    expect(fmtYield(0.5, "porcoes")).toBe("0,5 porções");
+    expect(fmtYield(1, "ml")).toBe("1 ml");
+    expect(fmtYield(500, "ml")).toBe("500 ml");
+    expect(fmtYield(1.25, "g")).toBe("1,3 g");
   });
 });
