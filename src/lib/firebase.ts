@@ -147,6 +147,8 @@ export type BodyPhoto = { id: string; taken_at: string; pose: Pose; path: string
 export type FoodItem = {
   name: string; quantity: string; grams: number; kcal: number; protein_g: number; carbs_g: number; fat_g: number;
   recipe_id?: string;
+  /** Bebida: quanto conta como líquido do dia. */
+  ml?: number;
 };
 
 export type RecipeUnit = "ml" | "g" | "porcoes";

@@ -2,6 +2,8 @@ import taco from "@/data/taco.json";
 import supplements from "@/data/supplements.json";
 import common from "@/data/common.json";
 import type { FoodItem } from "./firebase";
+import { isAlcohol } from "./fluids";
+import { norm } from "./norm";
 
 export type Portion = { label: string; g: number };
 
@@ -19,10 +21,12 @@ export type Food = {
   portions: Portion[];
   search: string;
   recipe_id?: string;
+  /** Bebida: conta como líquido do dia (ml = g). */
+  drink?: boolean;
 };
 
-export const norm = (s: string) =>
-  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9% ]+/g, " ").replace(/\s+/g, " ").trim();
+// Em módulo próprio para fluids.ts usar sem import circular.
+export { norm };
 
 // Nomes do dia a dia para os itens mais comuns da TACO (o nome original continua buscável).
 const RENAME: Record<string, string> = {
@@ -157,7 +161,9 @@ const per100 = (v: number, g: number) => (g > 0 ? (v / g) * 100 : 0);
 
 export const TACO: Food[] = (taco as TacoRow[]).map(([id, name, cat, kcal, protein, carbs, fat]) => {
   const n = cat === 3 ? prettyFruit(name) : pretty(name);
-  return { key: `taco:${id}`, preferred: PREFERRED.has(name) || undefined, name: n, source: "taco", kcal, protein, carbs, fat, portions: portionsFor(name, cat), search: searchText(`${n} ${name}`) };
+  // Categoria 8 da TACO = bebidas (menos as alcoólicas).
+  const drink = (cat === 8 && !isAlcohol(name)) || undefined;
+  return { key: `taco:${id}`, preferred: PREFERRED.has(name) || undefined, name: n, source: "taco", kcal, protein, carbs, fat, portions: portionsFor(name, cat), search: searchText(`${n} ${name}`), drink };
 });
 
 /** Pratos e itens do dia a dia que a TACO não tem (croissant, pizza, sorvete…): valores médios por 100 g. */
@@ -197,6 +203,8 @@ export function fromHistory(items: FoodItem[]): Food[] {
       fat: per100(it.fat_g, it.grams),
       portions: [{ label: it.quantity || `${Math.round(it.grams)} g`, g: it.grams }, ...portionsFor(it.name).filter((p) => p.g !== it.grams)],
       search: searchText(it.name),
+      // Item já salvo como bebida continua bebida ao repetir ou editar.
+      ...(it.ml ? { drink: true } : {}),
     });
   }
   return [...seen.values()];

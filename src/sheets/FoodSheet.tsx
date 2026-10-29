@@ -9,6 +9,7 @@ import { PrivateImage } from "@/components/PrivateImage";
 import { deleteObject, ref, uploadBytes } from "firebase/storage";
 import { estimateFood, row, rows, storage, table, type CustomFood, type DietPlan, type FoodItem, type Meal, type Place, type Profile, type Recipe } from "@/lib/firebase";
 import { amountToGrams, fmtYield, recipeFood } from "@/lib/recipes";
+import { drinkMl } from "@/lib/fluids";
 import { rescale, SCALE_LABEL, SCALES, type Scale } from "@/lib/plate";
 import { BatchCard, type BatchResult } from "./BatchCard";
 import { backfillAt, fmtNum, fmtTime, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
@@ -225,6 +226,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, onClose, o
 
   const lines: PlateLine[] = plate.map((p) => ({ ...p, n: nutrition(p.food, p.portion.g * p.qty) }));
   const total = lines.reduce((s, l) => s + l.n.kcal, 0);
+  const drinks = lines.reduce((s, l) => s + (drinkMl(l.food, l.portion.g * l.qty) ?? 0), 0);
 
   // Salva o preparo como receita e troca os itens marcados pela porção comida.
   async function saveBatch(r: BatchResult) {
@@ -505,6 +507,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, onClose, o
             <button className="link" onClick={() => setBatch(true)}>Fiz mais do que comi</button>
           )}
           {plate.length > 0 && <Facts lines={lines} estimated={plate.some((p) => p.ai)} />}
+          {!recipe && drinks > 0 && <p className="note">Conta como {fmtNum(drinks)} ml de líquido</p>}
           {notes && <p className="note">{notes}</p>}
         </div>
       )}
@@ -526,12 +529,14 @@ export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, onClose, o
 
 /** Linha do prato → item salvo na refeição (e nos ingredientes de uma receita). */
 function itemOf(l: PlateLine): FoodItem {
+  const ml = drinkMl(l.food, l.portion.g * l.qty);
   return {
     name: l.food.name,
     quantity: qtyLabel(l.qty, l.portion),
     grams: Math.round(l.portion.g * l.qty),
     ...l.n,
     ...(l.food.recipe_id ? { recipe_id: l.food.recipe_id } : {}),
+    ...(ml ? { ml } : {}),
   };
 }
 
