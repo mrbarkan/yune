@@ -75,7 +75,7 @@ export const YIELD_MAX = 20000;
 
 /** "Fiz mais do que comi": null quando dá para salvar; senão, o aviso. */
 export function batchValid(yieldAmount: number, eaten: number): string | null {
-  if (!(yieldAmount >= YIELD_MIN)) return "Informe quanto rendeu.";
+  if (!(yieldAmount >= YIELD_MIN && yieldAmount <= YIELD_MAX)) return "Informe quanto rendeu.";
   if (!(eaten > 0)) return "Informe quanto você comeu.";
   if (eaten > yieldAmount) return "Você comeu mais do que rendeu?";
   return null;

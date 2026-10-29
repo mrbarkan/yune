@@ -407,7 +407,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, onClose, o
               </div>
             </div>
           )}
-          {recentMeals.length > 0 && (
+          {recentMeals.length > 0 && !recipe && (
             <div>
               <p className="eyebrow">Repetir</p>
               <div className="chips">

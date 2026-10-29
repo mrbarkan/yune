@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { deleteDoc, getDocs, orderBy, query, updateDoc } from "firebase/firestore";
 import { Segmented } from "@/components/Sheet";
 import { FoodSheet } from "@/sheets/FoodSheet";
@@ -47,9 +48,11 @@ export function RecipesSection({ profile }: { profile: Profile }) {
           ))}
         </ul>
       )}
-      {editing && (
+      {/* No body, como a folha do consentimento: dentro da tela a folha fixa sai do lugar. */}
+      {editing && createPortal(
         <FoodSheet profile={profile} plan={null} dietOn={false} recipe={editing}
-          onClose={closeSheet} onSaved={savedSheet} onSavedRecipe={savedSheet} />
+          onClose={closeSheet} onSaved={savedSheet} onSavedRecipe={savedSheet} />,
+        document.body,
       )}
     </section>
   );

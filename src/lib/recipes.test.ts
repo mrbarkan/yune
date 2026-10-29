@@ -82,6 +82,8 @@ describe("receitas", () => {
     // A regra do Firestore exige rendimento de 0,5 a 20000.
     expect(batchValid(0.4, 0.2)).toBe("Informe quanto rendeu.");
     expect(batchValid(0.5, 0.5)).toBeNull();
+    expect(batchValid(20000, 200)).toBeNull();
+    expect(batchValid(20001, 200)).toBe("Informe quanto rendeu.");
   });
 });
 
