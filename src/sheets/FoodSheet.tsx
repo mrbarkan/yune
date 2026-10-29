@@ -14,6 +14,7 @@ import { rescale, SCALE_LABEL, SCALES, type Scale } from "@/lib/plate";
 import { BatchCard, type BatchResult } from "./BatchCard";
 import { backfillAt, fmtNum, fmtTime, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
 import { mealName } from "@/lib/slots";
+import { mealFields } from "@/lib/quickLog";
 
 export { mealName } from "@/lib/slots";
 
@@ -265,20 +266,8 @@ export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, onClose, o
       const ok = await uploadBytes(ref(storage, path), photo.blob, { contentType: "image/jpeg" }).then(() => true, () => false);
       if (ok) photo_path = path;
     }
-    const items = lines.map(itemOf);
-    const sum = (k: "protein_g" | "carbs_g" | "fat_g") => Math.round(items.reduce((s, i) => s + i[k], 0) * 10) / 10;
-    const fields = {
-      eaten_at: fromLocalInput(at),
-      description: items.map((i) => i.name).join(", ").slice(0, 600) || mealName(new Date(at)),
-      kcal: total,
-      protein_g: sum("protein_g"),
-      carbs_g: sum("carbs_g"),
-      fat_g: sum("fat_g"),
-      items,
-      source: meal?.source === "ai" || plate.some((p) => p.ai) ? "ai" : "manual",
-      place,
-      photo_path,
-    };
+    const source = meal?.source === "ai" || plate.some((p) => p.ai) ? "ai" : "manual";
+    const fields = mealFields(lines.map(itemOf), fromLocalInput(at), place, source, photo_path);
     const error = await (meal ? updateDoc(row("meals", meal.id), fields) : addDoc(table("meals"), { ...fields, created_at: new Date().toISOString() }))
       .then(() => null, () => "Não foi possível salvar.");
     setBusy("");

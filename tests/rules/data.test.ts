@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from "@firebase/rules-unit-testing";
 import { afterAll, beforeAll, beforeEach, describe, it, vi } from "vitest";
-import { doc, getDoc, getDocs, collection, setDoc, updateDoc, deleteDoc, setLogLevel } from "firebase/firestore";
+import { arrayUnion, doc, getDoc, getDocs, collection, setDoc, updateDoc, deleteDoc, setLogLevel } from "firebase/firestore";
 import { SECTIONS } from "../../src/lib/anamnesis";
 import { DEFAULT_REMINDERS } from "../../src/lib/defaults";
 
@@ -93,6 +93,21 @@ describe("regras: dados", () => {
     await bad({ owner: "bob" });
     await assertSucceeds(updateDoc(doc(alice(), "users/alice/recipes/r1"), { name: "Shake de banana", updated_at: "2026-10-20T12:00:00.000Z" }));
     await assertFails(updateDoc(doc(alice(), "users/alice/recipes/r1"), { created_at: "2026-10-20T12:00:00.000Z" }));
+  });
+
+  it("revisão do dia: só a dona, dia AAAA-MM-DD, até 40 chaves", async () => {
+    const path = "users/alice/day_reviews/2026-10-27";
+    await assertSucceeds(setDoc(doc(alice(), path), { updated_at: NOW, closed: ["slot:Jantar"] }));
+    await assertSucceeds(setDoc(doc(alice(), path), { updated_at: NOW, closed: arrayUnion(NOW) }, { merge: true }));
+    await assertSucceeds(getDoc(doc(alice(), path)));
+    await assertFails(getDoc(doc(bob(), path)));
+    await assertFails(setDoc(doc(bob(), path), { updated_at: NOW, closed: [] }));
+    await assertFails(setDoc(doc(alice(), "users/alice/day_reviews/2026-1-1"), { updated_at: NOW, closed: [] }));
+    await assertFails(setDoc(doc(alice(), path), { updated_at: NOW, closed: Array.from({ length: 41 }, (_, i) => `k${i}`) }));
+    await assertFails(setDoc(doc(alice(), path), { updated_at: NOW, closed: [], extra: 1 }));
+    await assertFails(setDoc(doc(alice(), path), { updated_at: "ontem", closed: [] }));
+    await assertFails(setDoc(doc(alice(), path), { updated_at: NOW, closed: "slot:Jantar" }));
+    await assertSucceeds(deleteDoc(doc(alice(), path)));
   });
 
   it("anamnesis só aceita chaves de SECTIONS", async () => {
