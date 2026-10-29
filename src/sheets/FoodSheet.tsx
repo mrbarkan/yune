@@ -8,7 +8,8 @@ import { addDoc, getDocs, limit, orderBy, query as q, updateDoc } from "firebase
 import { PrivateImage } from "@/components/PrivateImage";
 import { deleteObject, ref, uploadBytes } from "firebase/storage";
 import { estimateFood, row, rows, storage, table, type CustomFood, type DietPlan, type FoodItem, type Meal, type Place, type Profile, type Recipe } from "@/lib/firebase";
-import { recipeFood } from "@/lib/recipes";
+import { amountToGrams, fmtAmount, recipeFood, UNIT_LABEL } from "@/lib/recipes";
+import { BatchCard, type BatchResult } from "./BatchCard";
 import { backfillAt, fmtNum, fmtTime, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
 
 export type PlateItem = { id: string; food: Food; portion: Portion; qty: number; ai?: boolean };
@@ -76,6 +77,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
   const [open, setOpen] = useState<string | null>(null);
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [label, setLabel] = useState<Label | null>(null);
+  const [batch, setBatch] = useState(false);
   const [busy, setBusy] = useState<"" | "ai" | "label" | "save">("");
   const [err, setErr] = useState("");
   const [notes, setNotes] = useState("");
@@ -207,6 +209,28 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
 
   const lines: PlateLine[] = plate.map((p) => ({ ...p, n: nutrition(p.food, p.portion.g * p.qty) }));
   const total = lines.reduce((s, l) => s + l.n.kcal, 0);
+
+  // Salva o preparo como receita e troca os itens marcados pela porção comida.
+  async function saveBatch(r: BatchResult) {
+    setErr("");
+    const used = lines.filter((l) => r.picked.includes(l.id));
+    const now = new Date().toISOString();
+    const fields = { name: r.name, items: used.map(itemOf), yield_amount: r.yield_amount, yield_unit: r.yield_unit, created_at: now, updated_at: now };
+    let saved: Recipe;
+    try {
+      const doc = await addDoc(table("recipes"), fields);
+      saved = { ...fields, id: doc.id };
+    } catch {
+      return setErr("Não foi possível salvar a receita.");
+    }
+    const food = recipeFood(saved);
+    const portion = { label: `${fmtAmount(r.eaten)} ${UNIT_LABEL[r.yield_unit]}`, g: amountToGrams(saved, r.eaten) };
+    const ai = used.some((l) => l.ai) || undefined;
+    setPlate((p) => [...p.filter((x) => !r.picked.includes(x.id)), { id: newId(), food, portion, qty: 1, ai }]);
+    setRecipes((list) => [food, ...list]);
+    setOpen(null);
+    setBatch(false);
+  }
 
   async function save() {
     setBusy("save");
@@ -420,6 +444,11 @@ export function FoodSheet({ profile, plan, dietOn, meal, day, onClose, onSaved, 
               </li>
             ))}
           </ul>
+          {batch ? (
+            <BatchCard items={lines} onCancel={() => setBatch(false)} onSave={saveBatch} />
+          ) : plate.length >= 2 && (
+            <button className="link" onClick={() => setBatch(true)}>Fiz mais do que comi</button>
+          )}
           {plate.length > 0 && <Facts lines={lines} estimated={plate.some((p) => p.ai)} />}
           {notes && <p className="note">{notes}</p>}
         </div>

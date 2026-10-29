@@ -22,7 +22,8 @@ export const gramsPerUnit = (r: Yield) => (r.yield_unit === "porcoes" ? recipeTo
 
 export const amountToGrams = (r: Yield, amount: number) => amount * gramsPerUnit(r);
 
-const fmt = (n: number) => String(Math.round(n * 10) / 10).replace(".", ",");
+/** 200 → "200", 1.5 → "1,5". */
+export const fmtAmount = (n: number) => String(Math.round(n * 10) / 10).replace(".", ",");
 
 function portions(r: Yield): Portion[] {
   const n = r.yield_amount;
@@ -33,8 +34,8 @@ function portions(r: Yield): Portion[] {
   const u = r.yield_unit;
   return [
     ...(u === "ml" && n >= 200 ? [{ label: "copo (200 ml)", g: 200 }] : []),
-    { label: `metade (${fmt(n / 2)} ${u})`, g: n / 2 },
-    { label: `tudo (${fmt(n)} ${u})`, g: n },
+    { label: `metade (${fmtAmount(n / 2)} ${u})`, g: n / 2 },
+    { label: `tudo (${fmtAmount(n)} ${u})`, g: n },
   ];
 }
 
@@ -62,4 +63,12 @@ export function recipeFood(r: Recipe): Food {
 export function suggestRecipeName(items: FoodItem[]): string {
   const s = items.slice(0, 2).map((it) => it.name.trim()).filter(Boolean).join(" e ");
   return s.length > 40 ? `${s.slice(0, 39).trimEnd()}…` : s;
+}
+
+/** "Fiz mais do que comi": null quando dá para salvar; senão, o aviso. */
+export function batchValid(yieldAmount: number, eaten: number): string | null {
+  if (!(yieldAmount > 0)) return "Informe quanto rendeu.";
+  if (!(eaten > 0)) return "Informe quanto você comeu.";
+  if (eaten > yieldAmount) return "Você comeu mais do que rendeu?";
+  return null;
 }

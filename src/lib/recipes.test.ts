@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FoodItem, Recipe } from "./firebase";
 import { nutrition } from "./foods";
-import { amountToGrams, gramsPerUnit, recipeFood, recipeTotals, suggestRecipeName, UNIT_LABEL } from "./recipes";
+import { amountToGrams, batchValid, gramsPerUnit, recipeFood, recipeTotals, suggestRecipeName, UNIT_LABEL } from "./recipes";
 
 const item = (name: string, grams: number, kcal: number): FoodItem => ({ name, quantity: `${grams} g`, grams, kcal, protein_g: 0, carbs_g: 0, fat_g: 0 });
 const NOW = "2026-10-28T12:00:00.000Z";
@@ -70,5 +70,14 @@ describe("receitas", () => {
 
   it("rótulos das unidades", () => {
     expect(UNIT_LABEL).toEqual({ ml: "ml", g: "g", porcoes: "porções" });
+  });
+
+  it("fiz mais do que comi: rendeu e comi conferidos antes de salvar", () => {
+    expect(batchValid(500, 200)).toBeNull();
+    expect(batchValid(500, 500)).toBeNull();
+    expect(batchValid(0, 200)).toBe("Informe quanto rendeu.");
+    expect(batchValid(500, 0)).toBe("Informe quanto você comeu.");
+    expect(batchValid(500, 600)).toBe("Você comeu mais do que rendeu?");
+    expect(batchValid(Number.NaN, 200)).toBe("Informe quanto rendeu.");
   });
 });
