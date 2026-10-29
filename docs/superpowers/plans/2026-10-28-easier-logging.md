@@ -113,7 +113,7 @@ The rule:
   - bob reads alice's → fails.
   - Each of these fails: `yield_unit: "copo"`, `yield_amount: 0`, `items: []`, a 61-item list, an extra key `owner: "bob"`, and an update changing `created_at`.
 - [ ] **Step 2: Run** `npm run test:rules`. Expected: the new test FAILS.
-- [ ] **Step 3: Add the rule.** Add `"recipes"` to `FULL_COLLECTIONS`, and add "receitas" to the LEIA_ME list of what `dados.json` holds. Update `fullExport.test.ts` if it pins the list.
+- [ ] **Step 3: Add the rule.** Add `"recipes"` to `FULL_COLLECTIONS`, and add "receitas" to the LEIA_ME list of what `dados.json` holds. (`fullExport.test.ts` doesn't pin the list, so there's nothing to update there.)
 - [ ] **Step 4: Run** `npm run test:rules` and `npm test`. Expected: PASS.
 - [ ] **Step 5: Commit** `Receitas: regras, exportação e testes`.
 
@@ -132,6 +132,7 @@ Specifics:
 - Frequentes chips = `[...recipes.slice(0, 3), ...custom.slice(0, 4), ...frequent]`.
 - **In `save()`**, an item whose `food.recipe_id` is set writes `recipe_id` on the `FoodItem`.
 - Result rows show `· receita` the way `· meu item` is shown.
+- `fromHistory` skips items that have `recipe_id`, so a recipe portion isn't listed twice (once as the recipe, once as a history item).
 
 - [ ] **Step 1:** Implement.
 - [ ] **Step 2: Verify.**
@@ -148,6 +149,7 @@ Specifics:
 **Interfaces:**
 - Consumes: A1.
 - Produces:
+  - `itemOf(line): FoodItem` inside FoodSheet: the per-line item building now inline in `save()`, extracted so `save()` and the Batch save share it.
   - `batchValid(yieldAmount: number, eaten: number): string | null`: null when OK. Otherwise the pt-BR message:
     - "Informe quanto rendeu." when yield ≤ 0;
     - "Informe quanto você comeu." when eaten ≤ 0;
@@ -187,7 +189,7 @@ Behavior:
   - `rescale(qtys: number[], from: number, to: number): number[]`: each `q × to / from`, rounded to 2 decimals and at least 0.05.
 
 Behavior:
-- **State** `scale` (starts at 1, and resets to 1 when the plate becomes empty). With `plate.length > 1`, a chip row "½ · ¾ · 1 · 1½ · 2" sits above the plate list, with the current one `on`.
+- **State** `scale` starts at 1, and resets to 1 whenever an item is added or removed (`add`, `estimate`, Repetir, the remove stepper, and the Batch replace). So a newly added item is never rescaled by an old factor. With `plate.length > 1`, a chip row "½ · ¾ · 1 · 1½ · 2" sits above the plate list, with the current one `on`.
 - **Tapping a chip** sets every item's qty with `rescale` from the current scale to the tapped one.
 - The per-item steppers keep their 0.5 steps and show qty with a comma (`0,75`).
 
@@ -247,7 +249,7 @@ Behavior:
   - `mealDrinkMl(items: FoodItem[] | null | undefined): number`: the sum of `it.ml ?? 0`.
 
 `isDrinkName` matches on `norm(name)`:
-- **Yes:** `suco`, `refrigerante`, `cafe` (but not `po`/`torrado`), `cha ` / `cha$`, `leite` (but not `condensado|em po|po\b|de coco em po`), `agua de coco`, `bebida`, `shake`, `vitamina` (but not `vitamina [a-e]\b`), `isotonic`, `kombucha`, `cappuccino|capuccino` (but not `po`), `caldo de cana`, `limonada`, `mate`, `achocolatado` (but not `po`), `iogurte liquido|bebida lactea`.
+- **Yes** (whole words, `\b…\b`): `suco`, `refrigerante`, `cafe` (but not `po`/`torrado`), `cha`, `leite` (but not `condensado|em po|pudim|chocolate ao leite|doce de leite|creme de leite|pao de leite|bolo|mingau|arroz doce`), `agua de coco`, `bebida`, `shake`, `vitamina` (but not `vitamina [a-e]\b`), `isotonic`, `kombucha`, `cappuccino|capuccino` (but not `po`), `caldo de cana`, `limonada`, `mate`, `achocolatado` (but not `po`), `iogurte liquido|bebida lactea`. Word boundaries keep "salsicha", "bolacha" and "tomate" out.
 - **No:** a `\bpo\b` word, or alcohol.
 
 For recipes, `recipeFood` adds `drink: r.yield_unit === "ml"`.
@@ -256,7 +258,7 @@ The plate note under Facts reads `Conta como N ml de líquido`, where N is the s
 
 - [ ] **Step 1: Failing tests:**
   - These count: "Café coado (sem açúcar)" 200 → 200; "Suco de laranja" 300 → 300; "Leite integral" 200 → 200; "Água de coco" → yes; "Shake de whey" → yes; "Vitamina de banana" → yes.
-  - These don't: "Cerveja pilsen" → null; "Caipirinha" → null; "Leite condensado" → null; "Leite em pó" → null; "Achocolatado, pó" → null; "Café, pó, torrado" → null; "Vitamina C" → null; "Caldo de carne, tablete" → null; "Banana" → null.
+  - These don't: "Cerveja pilsen" → null; "Caipirinha" → null; "Cana, aguardente 1" → null; "Salsicha" → null; "Bolacha" → null; "Tomate" → null; "Pudim de leite" → null; "Chocolate ao leite" → null; "Doce de leite" → null; "Leite condensado" → null; "Leite em pó" → null; "Achocolatado, pó" → null; "Café, pó, torrado" → null; "Vitamina C" → null; "Caldo de carne, tablete" → null; "Banana" → null.
   - A `{drink: true}` TACO food → counts; an `ml` recipe food → counts.
   - `mealDrinkMl([{ml: 200}, {}, {ml: 50}])` → 250; `mealDrinkMl(null)` → 0.
 - [ ] **Step 2: Run.** Expected: FAIL.
@@ -277,7 +279,7 @@ The plate note under Facts reads `Conta como N ml de líquido`, where N is the s
 - Produces:
   - `totals(d).fluidMl`, `totals(d).drinksMl`.
   - `fluidsOn(day: Date)`.
-  - `fluidLabel(totalMl: number, waterMl: number): string` in `src/lib/fluids.ts`: `"1,6 L · 1,1 L de água"`, or just `"1,6 L"` when they're equal (built with `fmtLiters`).
+  - `fluidLabel(totalMl: number, waterMl: number): string` in `src/lib/fluids.ts`: `"1,6 L · 1,1 L de água"`, or just `"1,6 L"` when the two **formatted** values are equal (built with `fmtLiters`). So 1649/1600 → `"1,6 L"`.
 
 Behavior:
 - **Today:** the Água instrument shows `fluidMl` and its bar uses `fluidMl`. The sub line becomes `${fluidLabel-second-part or "de X L"}`; when drinks > 0, show `"1,1 L de água · meta 2 L"`.
@@ -285,7 +287,7 @@ Behavior:
 - **WaterSheet glass:** two fills. `.glass-fill` is water with height = water/goal. A new `.glass-fill.drinks` sits at `bottom: water%` with height = drinks/goal, `opacity: 0.18`, and a top line in `--water`. The combined height is capped at 100%. The big number is the total; under it, a `small` line shows `fluidLabel` when drinks > 0. The glass `aria-label` includes both values.
 
 - [ ] **Step 1: Failing tests:**
-  - `waterView({ base: { water: 1100, drinks: 500 }, failed: false }, 250)` → `total 1850, water 1350, drinks 500`. The existing failure cases still pass with the new shape.
+  - `waterView({ base: { water: 1100, drinks: 500 }, failed: false }, 250)` → `total 1850, water 1350, drinks 500`. The existing `toEqual` cases in `waterView.test.ts` get the new fields (`water: null, drinks: null` when base hasn't loaded).
   - `fluidLabel(1600, 1100)` → `"1,6 L · 1,1 L de água"`; `fluidLabel(1100, 1100)` → `"1,1 L"`.
   - `totals()` on a DayData with a meal whose items carry `ml: 200` → `drinksMl 200, fluidMl = water + 200`.
 - [ ] **Step 2: Run.** Expected: FAIL.
@@ -312,6 +314,7 @@ Rules:
 
 WaterSheet:
 - **Buttons:** one per container, with the name on top and `+N ml` below. Each has a small `½` button beside it, which logs `Math.round(ml / 2)`; at least 10, since the rules need ≥ 10.
+- **Layout:** `.water-buttons` is a fixed `repeat(4, 1fr)` grid today. Containers use a new 2-column grid (`.containers`) of button + `½` pairs, which works for 1 to 6 entries at phone width.
 - **"Meus recipientes"** replaces "Ajustar copos":
   - Rows of name + ml inputs, with ↑ ↓ buttons to reorder and × to delete (disabled with 1 left).
   - "Adicionar recipiente" (hidden at 6).
@@ -356,7 +359,7 @@ The Excel export: the "Água" sheet becomes columns `["Data", "ml", "Tipo"]`. Wa
 
 **Files:**
 - Create: `src/lib/slots.ts`, `src/lib/gaps.ts`, `src/lib/gaps.test.ts`
-- Modify: `src/sheets/FoodSheet.tsx` (`export { mealName } from "@/lib/slots"`)
+- Modify: `src/sheets/FoodSheet.tsx` (`import { mealName } from "@/lib/slots"` for its own use, plus `export { mealName } from "@/lib/slots"` so the imports in `Today.tsx` and `DietSheet.tsx` keep working)
 
 **Interfaces:**
 - Produces:
@@ -364,20 +367,26 @@ The Excel export: the "Água" sheet becomes columns `["Data", "ml", "Tipo"]`. Wa
   - `type Gap = { key: string; from: string; to: string }`, where key = `from`.
   - `type MissingSlot = { key: string; slot: "Café da manhã" | "Almoço" | "Jantar"; at: string }`, where key = `slot:${slot}` and at = the ISO of the slot middle (08:00, 13:00, 20:00 local) on that day.
   - `GAP_MS = 4 * 3_600_000`
-  - `findGaps(mealsAt: string[], now: Date): Gap[]`: only between two consecutive logged meals of the day (sorted), where `to - from >= GAP_MS`.
-  - `missingSlots(mealsAt: string[], day: Date, now: Date): MissingSlot[]`: Café (5–11), Almoço (11–15) and Jantar (18–23) with no meal whose `mealName` is that slot. Only slots whose end has passed: for today, `now >= slotEnd`; for past days, all of them.
+  - `findGaps(mealsAt: string[], day: Date, now: Date, window: { start: string; end: string }): Gap[]` (window = `water_start`/`water_end` "HH:MM"). It covers:
+    - Gaps between consecutive logged meals of the day (sorted) where `to - from >= GAP_MS`.
+    - **The trailing gap** from the last meal to `min(now, windowEnd)` for today, or `windowEnd` for a past day, when ≥ `GAP_MS`.
+    - No leading gap: a missing breakfast is covered by `missingSlots`.
+  - `missingSlots(mealsAt: string[], day: Date, now: Date): MissingSlot[]`: Café (5–11), Almoço (11–15) and Jantar (18–23) with no meal whose `mealName` is that slot. A slot is asked about only after its "ask" time: Café from 11:00, Almoço from 15:00, **Jantar from 21:00** (so the 21:30 review can ask about dinner). For past days, all of them.
   - `snackChips(history: Meal[], limit = 6): Meal[]`: meals whose `mealName(eaten_at)` is "Lanche" or "Ceia" and that have `items?.length`, grouped by `norm(description)`, ranked by count (ties → most recent), returning the most recent meal of each group.
   - `slotChips(history: Meal[], slot: MissingSlot["slot"], limit = 4): Meal[]`: the same grouping for one slot.
   - `midpoint(a: string, b: string): string` (ISO).
 
 - [ ] **Step 1: Failing tests** (TZ=America/Sao_Paulo is set by `npm test`):
   - **Gaps:**
-    - Meals at 07:40, 12:30 and 20:10 on 2026-10-27, with now = 21:30 → one gap `{ from: 12:30, to: 20:10 }`.
-    - Meals at 07:40 and 10:00 → no gap.
-    - A single meal → no gaps.
+    - All with window 09:00–21:00:
+    - Meals at 08:40, 12:30 and 20:10 on 2026-10-27, with now = 21:30 → one gap `{ from: 12:30, to: 20:10 }`. The trailing 20:10→21:00 gap is under 4 h.
+    - Meals at 08:40 and 10:00, now = 13:00 → no gap (the trailing gap is 3 h).
+    - Meals at 08:00 and 13:00, now = 21:30 → the trailing gap `{ from: 13:00, to: 21:00 }`.
+    - A past day with one meal at 08:00 → the trailing gap 08:00→21:00.
   - **Missing slots:**
     - Meals [12:30] at 21:30 today → `["Café da manhã", "Jantar"]`.
-    - The same at 10:00 today → `[]` (breakfast is still open until 11).
+    - The same at 20:00 today → `["Café da manhã"]` (dinner isn't asked until 21:00).
+    - No meals at 10:00 today → `[]` (breakfast is still open until 11).
     - A past day with no meals → all three.
   - **Snack chips:**
     - History of 3× "Iogurte, granola" at 16:00, 1× "Banana" at 16:30 and 2× "Arroz, feijão" at 12:30 → `["Iogurte, granola", "Banana"]`.
@@ -419,19 +428,19 @@ The rule `match /day_reviews/{day}`:
 
 **Files:**
 - Create: `src/sheets/SnackSheet.tsx`
-- Modify: `src/sheets/FoodSheet.tsx` (prop `at?: Date`: when set, it's the initial time), `src/styles.css` (`.toast`)
+- Modify: `src/sheets/FoodSheet.tsx` (prop `initialAt?: Date`: when set, it's the initial time; FoodSheet already has an `at` state), `src/styles.css` (`.toast`)
 
 **Interfaces:**
 - Consumes: `snackChips`, `midpoint`, `copyMeal`, `recipeFood`. Also `deleteDoc(row("meals", id))` for undo.
-- Produces: `<SnackSheet profile from={iso} to={iso} onClose onSaved onOther={(at: Date) => void} />`.
+- Produces: `<SnackSheet profile from={iso} to={iso} onClose onLogged onOther={(at: Date) => void} />`. App passes `bump` as `onLogged`, not `saved`, so the sheet stays mounted.
 
 Behavior:
-- **Title:** "Beliscou algo?", with the eyebrow `entre 12:30 e 16:05`.
+- **Title:** "Beliscou algo?". The eyebrow `entre 12:30 e 16:40` is the first child.
 - **Time pill:** defaults to `midpoint(from, to)` and is editable (datetime-local).
 - **Chips:** `snackChips` of the last 8 weeks (`getDocs` of meals with `eaten_at >= now - 56 days`, `orderBy desc`, `limit 400`), plus recipes (logged at their first portion). If there are fewer than 3 chips, add the FoodSheet "Frequentes" logic's top items. Then "Outro…" and "Nada".
 - **Tapping a chip** → `copyMeal` at the pill time. For recipes, a one-item meal via `mealFields`. Then:
-  - A toast "Registrado · Desfazer" for 5 s. Desfazer deletes the meal.
-  - Then `onSaved()`.
+  - A toast "Registrado · Desfazer" for 5 s, then `onLogged()`. Desfazer deletes the meal and calls `onLogged()`.
+  - When the toast expires without Desfazer, the sheet closes itself (`onClose()`).
 - **"Outro…"** → `onOther(new Date(pill))`. **"Nada"** → `onClose()`.
 
 - [ ] **Step 1:** Implement.
@@ -450,16 +459,18 @@ Behavior:
   - `loadRange`, `splitByDay`, `totals` from data.ts.
   - `containersOf` (B3).
   - `backfillAt` from time.ts.
-- Produces: `<CloseDaySheet profile day={Date} onClose onSaved />`.
+- Produces: `<CloseDaySheet profile day={Date} onClose onLogged />`.
 
 Behavior:
-- **Title** "Fechar o dia", with the eyebrow `fmtDayLong(day)`.
+- **Title** "Fechar o dia". The eyebrow `fmtDayLong(day)` is the first child, since `Sheet` has no eyebrow prop.
 - **Loads:** the day's data, the review, and 8 weeks of history (as in C3).
 - **Rows, in time order:**
   - Logged meals (read-only: time, description, kcal).
   - Each open `MissingSlot`, as "Café da manhã?" + `slotChips` + "Nada".
-  - Each open `Gap`, as `Nada entre 12:30 e 20:10. Beliscou algo?` + snack chips + "Nada".
+  - Each open `Gap` (from `findGaps(…, { start: r.water_start, end: r.water_end })`; the sheet reads `reminders/{uid}` with `DEFAULT_REMINDERS` as fallback), as `Nada entre 12:30 e 20:10. Beliscou algo?` + snack chips + "Nada".
   - "Open" = its key isn't in `closed`, and (for gaps) no meal now falls inside it.
+  - A chip logged at the midpoint of a long gap (≥ 8 h) can leave a new ≥ 4 h gap after it, with a new key. That's expected; don't "fix" it.
+  - The sheet gets `onLogged` (App passes `bump`, **not** `saved`), so it stays open and the Desfazer toast survives.
 - **Chip tap:** `copyMeal(meal, at)`, where `at` = `MissingSlot.at` or the gap midpoint. Then `closeInReview(day, key)`, refresh, and the toast with Desfazer.
 - **"Nada":** `closeInReview(day, key)`, and the row hides.
 - **Water:** the container buttons from `containersOf(profile)`. They add `water` at `isToday ? now : backfillAt(day, now)`, using the same `addDoc` shape as WaterSheet. A line shows `fluidLabel` of the day's totals.
@@ -479,21 +490,25 @@ Behavior:
 - Produces:
   - `type DeepLink = { kind: "snack"; from: string; to: string } | { kind: "review"; day: string } | null`
   - `parseDeepLink(search: string): DeepLink`: `?registrar=lanche&de=<iso>&ate=<iso>` (both valid ISO, de < ate) and `?fechar=AAAA-MM-DD`. Anything else is null.
-  - `withoutDeepLink(href: string): string`: strips `registrar`, `de`, `ate` and `fechar`.
+  - `withoutDeepLink(href: string): string`: strips `registrar`, `de`, `ate` and `fechar`, returning `pathname + search + hash` like `withoutProParam` in `src/lib/proReturn.ts`.
 
 Behavior:
-- **App** reads `parseDeepLink(location.search)` on mount and on `popstate`, opens `SnackSheet` / `CloseDaySheet`, then `history.replaceState(null, "", withoutDeepLink(location.href))`. SheetKind gains `"snack" | "review"`.
+- **App:**
+  - State `link: DeepLink` sits next to `sheet` and carries from/to or day. SheetKind gains `"snack" | "review"`.
+  - It reads `parseDeepLink(location.search)` on mount, and also on `navigator.serviceWorker` `message` events of `{ type: "deeplink", url }` (parse `new URL(url, location.origin).search`).
+  - It opens `SnackSheet` / `CloseDaySheet`, then `history.replaceState(null, "", withoutDeepLink(location.href))`.
 - **`SnackSheet` "Outro…"** opens FoodSheet with `at`.
 - **Today:** a `.btn ghost` "Fechar o dia" sits under the instruments when `!isToday || new Date().getHours() >= 19`, calling `onCloseDay(day)`.
 - **sw.js:**
   - `showNotification` passes `actions: data.actions ?? []`.
-  - `notificationclick`: if `e.action === "nada"`, just close. Otherwise, for an existing client, `c.navigate(target).then((w) => (w ?? c).focus())`, falling back to `c.focus()` if navigate rejects; else `openWindow(target)`.
+  - `notificationclick`: if `e.action === "nada"`, just close. Otherwise, for an existing client, `c.focus()` then `c.postMessage({ type: "deeplink", url: target })`. This keeps the open app's state, where `navigate()` would reload it and fail for uncontrolled clients. With no client, `openWindow(target)`.
 
 - [ ] **Step 1: Failing tests:**
   - `parseDeepLink("?registrar=lanche&de=2026-10-27T15:30:00.000Z&ate=2026-10-27T19:05:00.000Z")` → snack.
   - `parseDeepLink("?fechar=2026-10-27")` → review.
   - `?fechar=27-10-2026`, `de` after `ate`, and `?registrar=almoco` → null.
-  - `withoutDeepLink("https://x/?fechar=2026-10-27&pro=ok")` → `"https://x/?pro=ok"`.
+  - `withoutDeepLink("https://x/?fechar=2026-10-27&pro=ok")` → `"/?pro=ok"`.
+  - An encoded `de=2026-10-27T15%3A30%3A00.000Z` parses.
 - [ ] **Step 2: Run.** Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** `npm run check`. Expected: PASS. In the browser, both URLs open their sheets and the URL is cleaned. The Hoje button shows on a past day.
@@ -505,9 +520,8 @@ Behavior:
 - Modify:
   - `functions/src/reminderStep.ts` (+ test) and `functions/src/sendReminders.ts`;
   - `src/lib/defaults.ts` (`gap_enabled: true`) and `src/lib/firebase.ts` (`Reminders.gap_enabled: boolean`);
-  - `firestore.rules` (`validReminders` keys += `'gap_enabled','last_gap_at','gap_count_date','gap_count'`; `gap_enabled` optional bool; `keptOrAbsent` for the three server fields) and `tests/rules/profile.test.ts` (or wherever the reminders rules are tested);
-  - `src/screens/Settings.tsx` (Toggle "Perguntar sobre lanches", with the note "Se passar 4 horas sem nada registrado, o Yune pergunta. No máximo duas vezes por dia.");
-  - `functions/src/parity.test.ts` if it checks the DEFAULT_REMINDERS keys.
+  - `firestore.rules` (`validReminders` keys += `'gap_enabled','last_gap_at','gap_count_date','gap_count'`; `gap_enabled` optional bool; `keptOrAbsent` for the three server fields) and `tests/rules/data.test.ts`;
+  - `src/screens/Settings.tsx` (Toggle "Perguntar sobre lanches", with the note "Se passar 4 horas sem nada registrado, o Yune pergunta. No máximo duas vezes por dia."). `saveReminders` already writes every `DEFAULT_REMINDERS` key.
 
 **Interfaces:**
 - Produces:
@@ -519,13 +533,14 @@ Behavior:
 The gap nudge step, after the water step:
 ```
 if (r.gap_enabled !== false && inWindow && !(await d.sleepingNow(uid))) {
-  windowStart = today's local water_start as an instant (helper from reminderTime: localNow gives date+minutes; build via the existing tz helpers)
+  windowStart = new Date(d.now.getTime() - (local.minutes - toMin(r.water_start)) * 60_000)   // inWindow ⇒ non-negative; off by DST shifts, accepted
   last = await d.lastMealAt(uid)
   gapStart = max(last, windowStart)
   count = r.gap_count_date === local.date ? r.gap_count ?? 0 : 0
   if (now - gapStart >= 4h && count < 2 && (!r.last_gap_at || r.last_gap_at < gapStart)) {
-    title = last && last >= windowStart ? `Beliscou algo ${slotPhrase(minutes of last in tz)}?` : "Beliscou algo hoje?"
-    send({ title, body: "Um toque registra.", tag: "gap", url: `/?registrar=lanche&de=${gapStart}&ate=${now}`,
+    title = last && last >= windowStart ? `Beliscou algo ${slotPhrase(localNow(tz, new Date(last)).minutes)}?` : "Beliscou algo hoje?"
+    send({ title, body: "Um toque registra.", tag: "gap",
+           url: `/?registrar=lanche&de=${encodeURIComponent(gapStart)}&ate=${encodeURIComponent(now)}`,
            actions: [{ action: "nada", title: "Nada" }, { action: "registrar", title: "Registrar" }] })
     patch({ last_gap_at: now, gap_count_date: local.date, gap_count: count + 1 })
   }
@@ -536,16 +551,17 @@ Two more changes:
 - The summary payload gets `url: \`/?fechar=${local.date}\``.
 - In `sendReminders.push`, the payload is sent as `{ url: "/", ...payload }`, so the payload's url wins.
 
-- [ ] **Step 1: Failing tests** in `reminderStep.test.ts`, with a fixed clock of 16:05 São Paulo, window 09:00–21:00, and `lastMealAt` = 12:30 the same day:
-  - It sends `{ title: "Beliscou algo desde o almoço?", body: "Um toque registra.", tag: "gap", url: "/?registrar=lanche&de=<12:30Z>&ate=<now>", actions: [...] }` and patches `gap_count: 1`.
+- [ ] **Step 0: Keep the existing tests green.** In `reminderStep.test.ts`, `mk()` gets `gap_enabled: false`, and `deps()` gets `lastMealAt: async () => null` and `sleepingNow: async () => false`. The exact summary payload expectation ("resumo sem números") gains `url: "/?fechar=<the clock's local date>"`.
+- [ ] **Step 1: Failing tests** in `reminderStep.test.ts`, with a fixed clock of 16:40 São Paulo, window 09:00–21:00, and `lastMealAt` = 12:30 the same day:
+  - It sends `{ title: "Beliscou algo desde o almoço?", body: "Um toque registra.", tag: "gap", url: "/?registrar=lanche&de=<encoded 12:30Z>&ate=<encoded now>", actions: [...] }` and patches `gap_count: 1`.
   - It doesn't send when `last_gap_at` ≥ gapStart (the same gap twice).
   - It doesn't send when `gap_count_date` is today and `gap_count` is 2.
-  - It doesn't send when `sleepingNow` is true, when `gap_enabled: false`, when it's outside the window, or when the last meal was at 13:00 (only 3 h 05 min).
+  - It doesn't send when `sleepingNow` is true, when `gap_enabled: false`, when it's outside the window, or when the last meal was at 13:00 (only 3 h 40 min).
   - It sends when `gap_enabled` is absent (old docs).
   - With no meal today (last = yesterday 20:00) at 13:05 → "Beliscou algo hoje?" with de = 09:00 local.
   - The title never contains a digit, even with `push_details: true`.
   - The summary payload has `url: "/?fechar=<date>"`.
-  - Rules: the app writing `gap_enabled: false` succeeds; the app changing `gap_count` fails.
+  - Rules (in `tests/rules/data.test.ts`, next to "reminders: push_details é booleano opcional"): the app writing `gap_enabled: false` succeeds; the app changing `gap_count` fails.
 - [ ] **Step 2: Run** `npm --prefix functions test` and `npm run test:rules`. Expected: FAIL.
 - [ ] **Step 3: Implement.** Wire `lastMealAt` and `sleepingNow` in `sendReminders.ts` with Firestore queries (`meals orderBy eaten_at desc limit 1`; `sleep where wake_at == null`, then filter by `bed_at`).
 - [ ] **Step 4: Run** `npm run check`, `npm run build` and `npm run test:rules`. Expected: PASS.
