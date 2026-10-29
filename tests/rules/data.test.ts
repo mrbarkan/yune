@@ -129,6 +129,13 @@ describe("regras: dados", () => {
     await assertFails(updateDoc(doc(alice(), "users/alice/diet_plans/p1"), { title: "x" }));
   });
 
+  it("meals: item de receita (recipe_id) é aceito", async () => {
+    const item = { name: "Shake · 200 ml", quantity: "200 ml", grams: 200, kcal: 190, protein_g: 6, carbs_g: 30, fat_g: 5, recipe_id: "r1" };
+    await assertSucceeds(setDoc(doc(alice(), "users/alice/meals/m1"), {
+      eaten_at: NOW, description: "Shake", kcal: 190, items: [item], source: "manual", place: "casa", created_at: NOW,
+    }));
+  });
+
   it("bob não lê nem cria em meals da alice", async () => {
     await seed("users/alice/meals/m1", { description: "x" });
     await assertFails(getDoc(doc(bob(), "users/alice/meals/m1")));

@@ -63,7 +63,7 @@ export function BatchCard({ items, onCancel, onSave }: {
           <input inputMode="decimal" value={yieldText} placeholder="500" onChange={(e) => setYieldText(e.target.value)} /></label>
         <Segmented value={unit} onChange={setUnit} options={UNITS} />
       </div>
-      <label className="field"><span>Comi/tomei · {UNIT_LABEL[unit]}</span>
+      <label className="field"><span>Comi/tomei ({UNIT_LABEL[unit]})</span>
         <input inputMode="decimal" value={eatenText} placeholder="200" onChange={(e) => setEatenText(e.target.value)} /></label>
       {problem && <p className="note">{problem}</p>}
       <div className="row">

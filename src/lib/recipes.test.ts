@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FoodItem, Recipe } from "./firebase";
 import { nutrition } from "./foods";
-import { amountToGrams, batchValid, fmtYield, gramsPerUnit, recipeFood, recipeTotals, suggestRecipeName, UNIT_LABEL } from "./recipes";
+import { amountToGrams, batchValid, fmtYield, keptYield, gramsPerUnit, recipeFood, recipeTotals, suggestRecipeName, UNIT_LABEL } from "./recipes";
 
 const item = (name: string, grams: number, kcal: number): FoodItem => ({ name, quantity: `${grams} g`, grams, kcal, protein_g: 0, carbs_g: 0, fat_g: 0 });
 const NOW = "2026-10-28T12:00:00.000Z";
@@ -95,5 +95,16 @@ describe("fmtYield", () => {
     expect(fmtYield(1, "ml")).toBe("1 ml");
     expect(fmtYield(500, "ml")).toBe("500 ml");
     expect(fmtYield(1.25, "g")).toBe("1,3 g");
+  });
+});
+
+describe("keptYield", () => {
+  it("mantém o rendimento guardado enquanto o campo mostra o mesmo valor arredondado", () => {
+    expect(keptYield(333.3, 333.33)).toBe(333.33);
+    expect(keptYield(500, 500)).toBe(500);
+  });
+  it("usa o valor digitado quando ele muda", () => {
+    expect(keptYield(333.4, 333.33)).toBe(333.4);
+    expect(keptYield(250, 500)).toBe(250);
   });
 });

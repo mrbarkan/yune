@@ -25,6 +25,9 @@ export const amountToGrams = (r: Yield, amount: number) => amount * gramsPerUnit
 /** 200 → "200", 1.5 → "1,5". */
 export const fmtAmount = (n: number) => String(Math.round(n * 10) / 10).replace(".", ",");
 
+/** O rendimento a salvar: o campo mostra 1 casa (333,33 → "333,3"); enquanto o valor exibido não muda, fica o guardado. */
+export const keptYield = (typed: number, stored: number) => (fmtAmount(typed) === fmtAmount(stored) ? stored : typed);
+
 /** 500 ml → "500 ml"; 1 porção → "1 porção" (singular só no 1). */
 export const fmtYield = (n: number, u: RecipeUnit) =>
   `${fmtAmount(n)} ${u === "porcoes" && fmtAmount(n) === "1" ? "porção" : UNIT_LABEL[u]}`;

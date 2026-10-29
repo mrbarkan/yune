@@ -5,7 +5,7 @@ import { Segmented } from "@/components/Sheet";
 import { FoodSheet } from "@/sheets/FoodSheet";
 import { row, rows, table, type Profile, type Recipe, type RecipeUnit } from "@/lib/firebase";
 import { parseDecimal } from "@/lib/num";
-import { fmtAmount, fmtYield, recipeTotals, UNIT_LABEL, YIELD_MAX, YIELD_MIN } from "@/lib/recipes";
+import { fmtAmount, fmtYield, keptYield, recipeTotals, UNIT_LABEL, YIELD_MAX, YIELD_MIN } from "@/lib/recipes";
 import { fmtNum } from "@/lib/time";
 
 const UNITS = (["ml", "g", "porcoes"] as const).map((value) => ({ value, label: UNIT_LABEL[value] }));
@@ -71,7 +71,7 @@ function RecipeEditor({ recipe, onIngredients, onChanged, onDeleted }: {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  const amount = parseDecimal(yieldText) ?? 0;
+  const amount = keptYield(parseDecimal(yieldText) ?? 0, recipe.yield_amount);
   const problem = !name.trim() ? "Informe o nome." : !(amount >= YIELD_MIN && amount <= YIELD_MAX) ? "Informe quanto rendeu." : null;
   const changed = name.trim() !== recipe.name || amount !== recipe.yield_amount || unit !== recipe.yield_unit;
 
