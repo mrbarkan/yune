@@ -161,6 +161,8 @@ export default function Settings({ profile, ent, onPro, onSaved, diet, onBack }:
               <label className="field"><span>Horário do resumo</span>
                 <input type="time" value={r.summary_time.slice(0, 5)} onChange={(e) => saveReminders({ ...r, summary_time: e.target.value })} /></label>
             )}
+            <Toggle label="Perguntar sobre lanches" on={r.gap_enabled} onChange={(v) => saveReminders({ ...r, gap_enabled: v })} />
+            <p className="note">Se passar 4 horas sem nada registrado, o Yune pergunta. No máximo duas vezes por dia.</p>
             <Toggle label="Hora de dormir" on={r.bedtime_enabled} onChange={(v) => saveReminders({ ...r, bedtime_enabled: v })} />
             {r.bedtime_enabled && (
               <label className="field"><span>Lembrar às</span>

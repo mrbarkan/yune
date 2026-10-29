@@ -27,7 +27,7 @@ if (import.meta.env.VITE_USE_EMULATORS === "1") {
 
 /** Registros de cada pessoa ficam em users/{uid}/{coleção}. */
 export type Table = "meals" | "activities" | "water" | "sleep" | "custom_foods" | "push_subscriptions" | "diet_plans"
-  | "measurements" | "body_comp" | "lab_reports" | "body_photos" | "anamnesis" | "recipes";
+  | "measurements" | "body_comp" | "lab_reports" | "body_photos" | "anamnesis" | "recipes" | "day_reviews";
 
 const uid = () => {
   const u = auth.currentUser;
@@ -168,6 +168,9 @@ export type Recipe = {
 
 export type Place = "casa" | "restaurante" | "delivery";
 
+/** Revisão do dia (id = AAAA-MM-DD local): chaves de intervalos e refeições já respondidos. */
+export type DayReview = { id: string; updated_at: string; closed: string[] };
+
 export type CustomFood = {
   id: string;
   name: string;
@@ -218,6 +221,8 @@ export type Reminders = {
   bedtime_enabled: boolean;
   bedtime_time: string;
   push_details: boolean;
+  /** Pergunta sobre lanches depois de 4 h sem refeição. */
+  gap_enabled: boolean;
 };
 
 export type StripeState = { status: string; until: string; cancel_at_period_end: boolean; trial_end: string | null };

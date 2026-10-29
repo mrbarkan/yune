@@ -56,14 +56,16 @@ service cloud.firestore {
 
     function validReminders() {
       return d().keys().hasOnly(['water_enabled', 'water_every_min', 'water_start', 'water_end', 'summary_enabled', 'summary_time',
-          'bedtime_enabled', 'bedtime_time', 'push_details', 'last_water_at', 'last_summary_date', 'last_bedtime_date'])
+          'bedtime_enabled', 'bedtime_time', 'push_details', 'gap_enabled', 'last_water_at', 'last_summary_date', 'last_bedtime_date',
+          'last_gap_at', 'gap_count_date', 'gap_count'])
         && d().water_enabled is bool && d().summary_enabled is bool && d().bedtime_enabled is bool
         && (!d().keys().hasAny(['push_details']) || d().push_details is bool)
+        && (!d().keys().hasAny(['gap_enabled']) || d().gap_enabled is bool)
         && num(d().water_every_min, 30, 480)
         && hhmm(d().water_start) && hhmm(d().water_end) && hhmm(d().summary_time) && hhmm(d().bedtime_time);
     }
 
-    // Campos last_* são do servidor (sendReminders): a pessoa não os altera. Ausentes é aceito de propósito:
+    // Campos last_* e gap_count* são do servidor (sendReminders): a pessoa não os altera. Ausentes é aceito de propósito:
     // useProfile pode regravar DEFAULT_REMINDERS por cima; no pior caso repete um lembrete.
     function keptOrAbsent(k) { return !d().keys().hasAny([k]) || (resource != null && d()[k] == resource.data.get(k, null)); }
 
@@ -162,6 +164,16 @@ service cloud.firestore {
           && d().path is string && d().path.matches('^body-photos/' + uid + '/[^/]+$');
       }
 
+      // Revisão do dia: intervalos e refeições já respondidos (src/lib/quickLog.ts).
+      match /day_reviews/{day} {
+        allow read, delete: if owner(uid);
+        allow create, update: if owner(uid) && day.matches('^\\d{4}-\\d{2}-\\d{2}$')
+          && d().keys().hasOnly(['updated_at', 'closed'])
+          && iso(d().updated_at) && d().closed is list && d().closed.size() <= 40
+          // Conferência por amostra (as regras não percorrem listas): a primeira e a última chave, onde o arrayUnion acrescenta.
+          && (d().closed.size() == 0 || (d().closed[0] is string && d().closed[d().closed.size() - 1] is string));
+      }
+
       // Questionário de saúde: um documento por data (AAAA-MM-DD).
       match /anamnesis/{day} {
         allow read, delete: if owner(uid);
@@ -194,7 +206,8 @@ service cloud.firestore {
     match /reminders/{uid} {
       allow read: if owner(uid);
       allow create, update: if owner(uid) && validReminders()
-        && keptOrAbsent('last_water_at') && keptOrAbsent('last_summary_date') && keptOrAbsent('last_bedtime_date');
+        && keptOrAbsent('last_water_at') && keptOrAbsent('last_summary_date') && keptOrAbsent('last_bedtime_date')
+        && keptOrAbsent('last_gap_at') && keptOrAbsent('gap_count_date') && keptOrAbsent('gap_count');
     }
 
     // Pro: { pro, until, source }. Só o servidor concede; a pessoa só lê o próprio.

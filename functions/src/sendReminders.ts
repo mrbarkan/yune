@@ -1,4 +1,4 @@
-// Envia lembretes (água, hora de dormir) e o resumo do fim do dia via Web Push.
+// Envia lembretes (água, lanche, hora de dormir) e o resumo do fim do dia via Web Push.
 // Roda a cada 5 min pelo Cloud Scheduler.
 // Segredos: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (ex.: mailto:voce@email.com)
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
@@ -62,11 +62,21 @@ export const sendReminders = onSchedule(
           hasWaterSince: async (_u, since) =>
             !(await user.collection("water").where("drank_at", ">=", since).limit(1).get()).empty
             || (await user.collection("meals").where("eaten_at", ">=", since).get()).docs.some((m) => mealDrinkMl(m.get("items")) > 0),
+          lastMealAt: async () => {
+            const snap = await user.collection("meals").orderBy("eaten_at", "desc").limit(1).get();
+            return snap.empty ? null : snap.docs[0]!.get("eaten_at") ?? null;
+          },
+          // Registro aberto recente: um sono esquecido aberto há dias não silencia o lembrete.
+          sleepingNow: async () => {
+            const since = now.getTime() - 20 * 3_600_000;
+            return (await user.collection("sleep").where("wake_at", "==", null).get()).docs
+              .some((s) => Date.parse(s.get("bed_at")) >= since);
+          },
           patch: async (_u, patch) => { await byId.get(uid)!.ref.update(patch); },
           push: async (sub, payload) => {
             await webpush.sendNotification(
               { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-              JSON.stringify({ ...payload, url: "/" }),
+              JSON.stringify({ url: "/", ...payload }),
               { TTL: 60 * 60, timeout: 10_000 },
             );
           },

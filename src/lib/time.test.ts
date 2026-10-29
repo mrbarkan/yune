@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { backfillAt, fmtDayMonth, fmtDuration, toLocalInput } from "./time";
+import { backfillAt, dayId, fmtDayMonth, fmtDuration, toLocalInput } from "./time";
 
 describe("time", () => {
   it("toLocalInput usa a hora local", () => {
@@ -32,5 +32,12 @@ describe("backfillAt", () => {
   it("hoje, com horário de ontem (meia-noite há pouco): não muda", () => {
     const at = new Date(2026, 9, 20, 23, 50);
     expect(backfillAt(new Date(2026, 9, 21), at, new Date(2026, 9, 21, 0, 20))).toEqual(at);
+  });
+});
+
+describe("dayId", () => {
+  it("AAAA-MM-DD do dia local, mesmo perto da meia-noite", () => {
+    expect(dayId(new Date(2026, 9, 27, 23, 59))).toBe("2026-10-27");
+    expect(dayId(new Date(2026, 9, 28, 0, 1))).toBe("2026-10-28");
   });
 });

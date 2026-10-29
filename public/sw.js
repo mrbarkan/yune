@@ -1,5 +1,5 @@
 // Yune service worker: casca offline + Web Push.
-const CACHE = "yune-v3";
+const CACHE = "yune-v4";
 const SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
@@ -42,15 +42,22 @@ self.addEventListener("push", (e) => {
     icon: "/icons/icon-192.png",
     badge: "/icons/badge-96.png",
     data: { url: data.url },
+    actions: data.actions ?? [],
   }));
 });
 
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();
+  if (e.action === "nada") return;
   const target = e.notification.data?.url || "/";
   e.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
-      for (const c of list) if ("focus" in c) return c.focus();
+      // App já aberto: foca e manda a URL (navigate() recarregaria e falha em cliente não controlado).
+      for (const c of list) {
+        if ("focus" in c) {
+          return c.focus().catch(() => {}).then(() => c.postMessage({ type: "deeplink", url: target }));
+        }
+      }
       return self.clients.openWindow(target);
     }),
   );

@@ -14,7 +14,7 @@ vi.mock("./firebase", () => ({
   table: (n: string) => { reads.push(n); return n; },
   rows: (snap: { docs: { id: string; data: () => object }[] }) => snap.docs.map((d) => ({ ...d.data(), id: d.id })),
 }));
-import { downloadAll, filePaths, manifest, zipFileName, zipName, type FullData } from "./fullExport";
+import { downloadAll, FULL_COLLECTIONS, filePaths, LEIA_ME, manifest, zipFileName, zipName, type FullData } from "./fullExport";
 
 const uid = "u1";
 const data = (c: FullData["collections"], profile: Record<string, unknown> = {}): FullData => ({ profile, reminders: null, entitlements: null, collections: c });
@@ -61,6 +61,11 @@ describe("fullExport", () => {
     expect(m.exportado_em).toBe("2026-10-20T12:00:00.000Z");
     expect(m.arquivos).toEqual([{ caminho: "arquivos/meal-photos/a.jpg" }]);
     expect(m.arquivos_faltando).toEqual(["arquivos/meal-photos/z.jpg"]);
+  });
+
+  it("revisões do dia entram na exportação e no LEIA-ME", () => {
+    expect(FULL_COLLECTIONS).toContain("day_reviews");
+    expect(LEIA_ME).toContain("revisões do dia");
   });
 
   it("zipFileName usa o dia local (São Paulo perto da meia-noite UTC)", () => {

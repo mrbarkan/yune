@@ -13,6 +13,10 @@ import { drinkMl } from "@/lib/fluids";
 import { rescale, SCALE_LABEL, SCALES, type Scale } from "@/lib/plate";
 import { BatchCard, type BatchResult } from "./BatchCard";
 import { backfillAt, fmtNum, fmtTime, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
+import { mealName } from "@/lib/slots";
+import { mealFields } from "@/lib/quickLog";
+
+export { mealName } from "@/lib/slots";
 
 export type PlateItem = { id: string; food: Food; portion: Portion; qty: number; ai?: boolean };
 export type PlateLine = PlateItem & { n: ReturnType<typeof nutrition> };
@@ -24,15 +28,6 @@ const PLACES: { value: Place; label: string }[] = [
   { value: "restaurante", label: "Restaurante" },
   { value: "delivery", label: "Delivery" },
 ];
-
-export const mealName = (d: Date) => {
-  const h = d.getHours();
-  if (h >= 5 && h < 11) return "Café da manhã";
-  if (h < 15 && h >= 11) return "Almoço";
-  if (h < 18 && h >= 15) return "Lanche";
-  if (h < 23 && h >= 18) return "Jantar";
-  return "Ceia";
-};
 
 const lastPlace = (): Place => {
   try {
@@ -62,7 +57,7 @@ function fromAiItem(it: FoodItem): Food {
 }
 
 /** Nova refeição, a refeição `meal` já salva para corrigir, ou os ingredientes da receita `recipe`. */
-export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, onClose, onSaved, onSavedRecipe, onProfile }: {
+export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, initialAt, onClose, onSaved, onSavedRecipe, onProfile }: {
   profile: Profile;
   plan: DietPlan | null;
   dietOn: boolean;
@@ -71,13 +66,16 @@ export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, onClose, o
   recipe?: Recipe;
   /** Dia visto em Hoje: uma refeição nova num dia anterior começa nessa data. */
   day?: Date;
+  /** Horário inicial de uma refeição nova (vence `day`), como o "Outro…" do lanche. */
+  initialAt?: Date;
   onClose: () => void;
-  onSaved: () => void;
+  /** `eatenAt`: horário salvo da refeição (só ao salvar uma refeição). */
+  onSaved: (eatenAt?: string) => void;
   onSavedRecipe?: () => void;
   /** Recarrega o perfil (depois de autorizar a IA). */
   onProfile?: () => void;
 }) {
-  const [at, setAt] = useState(() => toLocalInput(meal ? new Date(meal.eaten_at) : backfillAt(day ?? new Date(), new Date())));
+  const [at, setAt] = useState(() => toLocalInput(meal ? new Date(meal.eaten_at) : initialAt ?? backfillAt(day ?? new Date(), new Date())));
   const [place, setPlace] = useState<Place>(() => meal?.place ?? lastPlace());
   const [query, setQuery] = useState("");
   const [plate, setPlate] = useState<PlateItem[]>(() => (recipe ? plateFromItems(recipe.items) : meal ? plateFromMeal(meal) : []));
@@ -271,20 +269,8 @@ export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, onClose, o
       const ok = await uploadBytes(ref(storage, path), photo.blob, { contentType: "image/jpeg" }).then(() => true, () => false);
       if (ok) photo_path = path;
     }
-    const items = lines.map(itemOf);
-    const sum = (k: "protein_g" | "carbs_g" | "fat_g") => Math.round(items.reduce((s, i) => s + i[k], 0) * 10) / 10;
-    const fields = {
-      eaten_at: fromLocalInput(at),
-      description: items.map((i) => i.name).join(", ").slice(0, 600) || mealName(new Date(at)),
-      kcal: total,
-      protein_g: sum("protein_g"),
-      carbs_g: sum("carbs_g"),
-      fat_g: sum("fat_g"),
-      items,
-      source: meal?.source === "ai" || plate.some((p) => p.ai) ? "ai" : "manual",
-      place,
-      photo_path,
-    };
+    const source = meal?.source === "ai" || plate.some((p) => p.ai) ? "ai" : "manual";
+    const fields = mealFields(lines.map(itemOf), fromLocalInput(at), place, source, photo_path);
     const error = await (meal ? updateDoc(row("meals", meal.id), fields) : addDoc(table("meals"), { ...fields, created_at: new Date().toISOString() }))
       .then(() => null, () => "Não foi possível salvar.");
     setBusy("");
@@ -296,7 +282,7 @@ export function FoodSheet({ profile, plan, dietOn, meal, recipe, day, onClose, o
     } catch {
       /* armazenamento indisponível */
     }
-    onSaved();
+    onSaved(fields.eaten_at);
   }
 
   const when = new Date(at);

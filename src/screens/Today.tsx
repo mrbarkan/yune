@@ -16,7 +16,7 @@ type Entry = { id: string; table: Table; at: string; kind: EditTarget["kind"]; t
 
 const PLACE_LABEL = { casa: "em casa", restaurante: "restaurante", delivery: "delivery" } as const;
 
-export default function Today({ profile, day, onDay, version, onChange, plan, dietOn, onOpenDiet, onEdit }: {
+export default function Today({ profile, day, onDay, version, onChange, plan, dietOn, onOpenDiet, onEdit, onCloseDay }: {
   profile: Profile;
   /** Dia visto (início do dia). Fica no App para os registros novos nascerem nesse dia. */
   day: Date;
@@ -27,6 +27,8 @@ export default function Today({ profile, day, onDay, version, onChange, plan, di
   dietOn: boolean;
   onOpenDiet: () => void;
   onEdit: (t: EditTarget) => void;
+  /** Abre "Fechar o dia" para `day`. */
+  onCloseDay: (day: Date) => void;
 }) {
   const [confirm, setConfirm] = useState<string | null>(null);
   const { data: raw, loading } = useRange(day, 1, version);
@@ -90,6 +92,8 @@ export default function Today({ profile, day, onDay, version, onChange, plan, di
         <Instrument kind="sleep" label="Sono" value={t.sleepMin ? fmtDuration(t.sleepMin) : "—"} unit="" sub={`meta ${fmtDuration(profile.sleep_goal_min)}`}
           frac={t.sleepMin / profile.sleep_goal_min} />
       </section>
+
+      {(!isToday || new Date().getHours() >= 19) && <button className="btn ghost close-day" onClick={() => onCloseDay(day)}>Fechar o dia</button>}
 
       {t.kcalIn > 0 && (
         <section className="macros" aria-label="Macronutrientes">
