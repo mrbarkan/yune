@@ -64,6 +64,13 @@ service cloud.firestore {
 
     function validItems(v) { return v == null || (v is list && v.size() <= 60); }
 
+    function validRecipe() {
+      return d().keys().hasOnly(['name', 'items', 'yield_amount', 'yield_unit', 'created_at', 'updated_at'])
+        && text(d().name, 1, 80) && d().items is list && d().items.size() >= 1 && d().items.size() <= 60
+        && d().yield_unit in ['ml', 'g', 'porcoes'] && num(d().yield_amount, 0.5, 20000)
+        && iso(d().created_at) && iso(d().updated_at);
+    }
+
     match /users/{uid} {
       allow read: if owner(uid);
       allow create, update: if owner(uid) && validProfile(uid);
@@ -112,6 +119,13 @@ service cloud.firestore {
           && d().serving_g is number && d().serving_g > 0 && d().serving_g <= 2000
           && num(d().kcal, 0, 5000) && num(d().protein_g, 0, 2000) && num(d().carbs_g, 0, 2000) && num(d().fat_g, 0, 2000)
           && iso(d().created_at);
+      }
+
+      // Receitas: o app cria e edita (created_at fixo).
+      match /recipes/{id} {
+        allow read, delete: if owner(uid);
+        allow create: if owner(uid) && validRecipe();
+        allow update: if owner(uid) && validRecipe() && d().created_at == resource.data.created_at;
       }
 
       // Dieta prescrita: quem cria é a função importDietPlan; o app só lê, liga/desliga e apaga.

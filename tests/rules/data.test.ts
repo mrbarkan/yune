@@ -34,6 +34,11 @@ const food = (extra: object = {}) => ({
   name: "Pão", serving_label: "1 fatia", serving_g: 25, kcal: 60, protein_g: 2, carbs_g: 11, fat_g: 1, created_at: NOW, ...extra,
 });
 
+const recipe = (extra: object = {}) => ({
+  name: "Shake", items: [{ name: "Leite", quantity: "400 ml", grams: 400, kcal: 248, protein_g: 13, carbs_g: 19, fat_g: 13 }],
+  yield_amount: 500, yield_unit: "ml", created_at: NOW, updated_at: NOW, ...extra,
+});
+
 describe("regras: dados", () => {
   it("push: aceita FCM, recusa outros hosts e campos ruins", async () => {
     await assertSucceeds(setDoc(doc(alice(), `users/alice/push_subscriptions/${ID64}`), push()));
@@ -75,6 +80,19 @@ describe("regras: dados", () => {
   it("custom_foods exige created_at ISO", async () => {
     await assertSucceeds(setDoc(doc(alice(), "users/alice/custom_foods/f1"), food()));
     await assertFails(setDoc(doc(alice(), "users/alice/custom_foods/f2"), food({ created_at: { x: 1 } })));
+  });
+
+  it("receitas: só a dona, rendimento e itens válidos, created_at fixo", async () => {
+    await assertSucceeds(setDoc(doc(alice(), "users/alice/recipes/r1"), recipe()));
+    await assertFails(getDoc(doc(bob(), "users/alice/recipes/r1")));
+    const bad = (extra: object) => assertFails(setDoc(doc(alice(), "users/alice/recipes/r2"), recipe(extra)));
+    await bad({ yield_unit: "copo" });
+    await bad({ yield_amount: 0 });
+    await bad({ items: [] });
+    await bad({ items: Array.from({ length: 61 }, () => recipe().items[0]) });
+    await bad({ owner: "bob" });
+    await assertSucceeds(updateDoc(doc(alice(), "users/alice/recipes/r1"), { name: "Shake de banana", updated_at: "2026-10-20T12:00:00.000Z" }));
+    await assertFails(updateDoc(doc(alice(), "users/alice/recipes/r1"), { created_at: "2026-10-20T12:00:00.000Z" }));
   });
 
   it("anamnesis só aceita chaves de SECTIONS", async () => {
