@@ -120,6 +120,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .move { --c: var(--move); }
 .water { --c: var(--water); }
 .sleep { --c: var(--sleep); }
+.close-day { width: 100%; margin-top: 16px; }
 
 .macros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin: 22px 0 6px; }
 .macro { display: grid; gap: 2px; }
