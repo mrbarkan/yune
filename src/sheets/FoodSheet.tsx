@@ -13,6 +13,9 @@ import { drinkMl } from "@/lib/fluids";
 import { rescale, SCALE_LABEL, SCALES, type Scale } from "@/lib/plate";
 import { BatchCard, type BatchResult } from "./BatchCard";
 import { backfillAt, fmtNum, fmtTime, fromLocalInput, sameDay, toLocalInput } from "@/lib/time";
+import { mealName } from "@/lib/slots";
+
+export { mealName } from "@/lib/slots";
 
 export type PlateItem = { id: string; food: Food; portion: Portion; qty: number; ai?: boolean };
 export type PlateLine = PlateItem & { n: ReturnType<typeof nutrition> };
@@ -24,15 +27,6 @@ const PLACES: { value: Place; label: string }[] = [
   { value: "restaurante", label: "Restaurante" },
   { value: "delivery", label: "Delivery" },
 ];
-
-export const mealName = (d: Date) => {
-  const h = d.getHours();
-  if (h >= 5 && h < 11) return "Café da manhã";
-  if (h < 15 && h >= 11) return "Almoço";
-  if (h < 18 && h >= 15) return "Lanche";
-  if (h < 23 && h >= 18) return "Jantar";
-  return "Ceia";
-};
 
 const lastPlace = (): Place => {
   try {
